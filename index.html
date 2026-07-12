@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=121">
+  <link rel="stylesheet" href="styles.css?v=122">
 </head>
 <body>
   <div class="app">
@@ -42,11 +42,7 @@
         <!-- North Star -->
         <div class="ns-card" id="northStar"></div>
 
-        <!-- Active goal selector -->
-        <button class="goal-selector-btn" id="goalSelectorBtn">
-          <span id="goalSelectorText"><span class="ic-slot" data-ic="target"></span> Set category</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
+        <!-- Category / goal selector removed — feature deprecated. -->
 
         <!-- Stats strip -->
         <div class="stats-strip">
@@ -835,8 +831,8 @@
 
   <!-- Capacitor runtime (loaded by native shell at runtime — also works in browser dev) -->
   <script src="capacitor.js"></script>
-  <script src="app.js?v=121" type="module"></script>
-  <script src="billing.js?v=121"></script>
+  <script src="app.js?v=122" type="module"></script>
+  <script src="billing.js?v=122"></script>
   <script>
     // PWA installability for the TWA wrapper (no-op where SW is unsupported).
     if ('serviceWorker' in navigator) {

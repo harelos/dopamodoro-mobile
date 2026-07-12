@@ -776,17 +776,10 @@ input, textarea { -webkit-user-select: auto; user-select: auto; }
   font-family: inherit;
 }
 .task-add-row input:focus { outline: none; border-color: var(--dopa-1); }
-.task-add-row button {
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, var(--dopa-1), var(--dopa-2));
-  color: white;
-  font-size: 22px;
-  cursor: pointer;
-  box-shadow: 0 3px 12px rgba(236,72,153,0.4);
-  font-family: inherit;
-}
+/* NOTE: the "Pick" + "Add" buttons for this row are styled below via `.tf-pick`
+   and `.task-add-row #addTaskBtn`. The old generic `.task-add-row button` circle
+   rule was removed — its higher specificity overrode `.tf-pick`, rendering it as
+   a clipped orange circle overlapping the add button. */
 
 /* ==================== TASKS VIEW ==================== */
 .todo-add-row {

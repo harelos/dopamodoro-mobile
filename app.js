@@ -3136,8 +3136,8 @@ function wire() {
     haptic('light');
   });
 
-  // Goal selector
-  document.getElementById('goalSelectorBtn').addEventListener('click', openGoalSelector);
+  // Goal selector (button removed from timer view; guard in case it's absent)
+  document.getElementById('goalSelectorBtn')?.addEventListener('click', openGoalSelector);
 
   // Heatmap toggle
   document.getElementById('heatmapToggleBtn').addEventListener('click', () => {
