@@ -1,0 +1,19 @@
+{
+  "name": "Dopamodoro — Focus Timer for ADHD Brains",
+  "short_name": "Dopamodoro",
+  "description": "A Pomodoro focus timer designed for ADHD brains. Not a medical device; does not diagnose, treat, cure, or prevent any medical condition.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#100B1E",
+  "theme_color": "#100B1E",
+  "lang": "en",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "icons/icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

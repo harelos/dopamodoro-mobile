@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#100B1E">
+  <title>Dopamodoro</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=121">
+</head>
+<body>
+  <div class="app">
+
+    <!-- ========= STATUS BAR SPACER (safe area top) ========= -->
+    <div class="safe-top"></div>
+
+    <!-- ========= TOP HEADER ========= -->
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-mark ic-slot" data-ic="tomato"></div>
+        <span class="brand-name">Dopamodoro</span>
+        <span class="brand-pro hidden" id="proBadge">PRO</span>
+      </div>
+      <div class="top-bar-right">
+        <button class="go-pro-btn hidden" id="goProBtn">Go Pro</button>
+        <button class="level-chip-mini" id="levelChip" title="Achievements">
+          <span id="levelChipText"><span class="ic-slot" data-ic="seedling"></span> Sprout</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ========= MAIN CONTENT AREA — one view visible at a time ========= -->
+    <main class="views">
+
+      <!-- ===== VIEW: TIMER ===== -->
+      <section class="view view-timer active" id="viewTimer">
+
+        <!-- North Star -->
+        <div class="ns-card" id="northStar"></div>
+
+        <!-- Active goal selector -->
+        <button class="goal-selector-btn" id="goalSelectorBtn">
+          <span id="goalSelectorText"><span class="ic-slot" data-ic="target"></span> Set category</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+
+        <!-- Stats strip -->
+        <div class="stats-strip">
+          <div class="stat-chip"><span class="stat-num" id="statToday">0</span><span class="stat-lbl">Today</span></div>
+          <div class="stat-chip"><span class="stat-num" id="statStreak">0</span><span class="stat-lbl">Streak <span class="ic-slot" data-ic="flame"></span></span></div>
+          <div class="stat-chip"><span class="stat-num" id="statTotal">0</span><span class="stat-lbl">All-time</span></div>
+          <div class="stat-chip"><span class="stat-num" id="statTomatoes">0</span><span class="stat-lbl ic-slot" data-ic="tomato"></span></div>
+        </div>
+
+        <!-- Home summary -->
+        <div class="home-summary" id="homeSummary"></div>
+
+        <!-- Tomorrow launchpad — yesterday's focus, resurfaced -->
+        <div class="launchpad hidden" id="tomorrowLaunchpad"></div>
+
+        <!-- Next meeting reminder -->
+        <div class="reminder-pill hidden" id="reminderPill"></div>
+
+        <!-- Ambient next-deadline pill -->
+        <div class="deadline-strip hidden" id="deadlineStrip"></div>
+
+        <!-- Coach nudge micro-card -->
+        <div class="coach-nudge hidden" id="coachNudge"></div>
+
+        <!-- Daily wrap trigger (evening) -->
+        <div class="wrap-trigger hidden" id="wrapTrigger"></div>
+
+        <!-- Mode bar -->
+        <div class="mode-bar">
+          <button class="mode-pill active" data-mode="work">Focus</button>
+          <button class="mode-pill" data-mode="shortBreak">Short Break</button>
+          <button class="mode-pill" data-mode="longBreak">Long Break</button>
+        </div>
+
+        <!-- Timer ring + duration chips on the side -->
+        <div class="timer-section">
+          <div class="duration-chips" id="durationChips">
+            <button class="dur-chip" data-min="15">15</button>
+            <button class="dur-chip is-active" data-min="20">20</button>
+            <button class="dur-chip" data-min="25">25</button>
+            <button class="dur-chip" data-min="custom" title="Custom">+</button>
+          </div>
+
+          <div class="timer-ring-wrap">
+            <div class="timer-clouds">
+              <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div><div class="cloud c4"></div><div class="cloud c5"></div>
+            </div>
+            <div class="timer-particles">
+              <span class="pt p1"></span><span class="pt p2"></span><span class="pt p3"></span><span class="pt p4"></span>
+              <span class="pt p5"></span><span class="pt p6"></span><span class="pt p7"></span><span class="pt p8"></span>
+              <span class="pt star s1"></span><span class="pt star dim s2"></span><span class="pt star s3"></span><span class="pt star warm s4"></span>
+              <span class="pt star s5"></span><span class="pt star dim s6"></span><span class="pt star warm s7"></span><span class="pt star s8"></span>
+            </div>
+            <svg class="timer-svg" width="220" height="220" viewBox="0 0 220 220">
+              <defs>
+                <linearGradient id="timerGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#C026D3"/>
+                  <stop offset="45%" stop-color="#F43F5E"/>
+                  <stop offset="100%" stop-color="#FB923C"/>
+                </linearGradient>
+                <!-- Molten wobble: animated fractal noise displaces the glow edge so
+                     the lava ring ripples like liquid instead of a static stroke. -->
+                <filter id="lavaWarp" x="-60%" y="-60%" width="220%" height="220%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="noise">
+                    <animate attributeName="baseFrequency" dur="14s" values="0.012 0.02; 0.02 0.03; 0.012 0.02" repeatCount="indefinite"/>
+                  </feTurbulence>
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+                  <feGaussianBlur stdDeviation="3.2"/>
+                </filter>
+                <filter id="ringGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="4.5"/></filter>
+              </defs>
+              <circle class="ring-bg" cx="110" cy="110" r="100"/>
+              <circle class="ring-dotted" cx="110" cy="110" r="86"/>
+              <!-- outer molten halo (wobbling), mid glow, crisp core line -->
+              <circle class="ring-lava" id="timerRingLava" cx="110" cy="110" r="100" filter="url(#lavaWarp)"/>
+              <circle class="ring-prog-glow" id="timerRingGlow" cx="110" cy="110" r="100" filter="url(#ringGlow)"/>
+              <circle class="ring-prog" id="timerRing" cx="110" cy="110" r="100"/>
+            </svg>
+            <div class="timer-thumb is-hidden" id="timerThumb"></div>
+            <div class="timer-center">
+              <div class="timer-motiv is-hidden" id="timerMotiv">
+                <svg class="timer-motiv-ic" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2c1.2 3.1-2.8 4.4-2.8 8.2a2.8 2.8 0 0 0 5.6 0c0-.9-.6-1.7-.6-2.6 1.9 1.3 3.8 4 3.8 6.8a6 6 0 1 1-12 0C6 9 9.2 7.6 12 2z"/></svg>
+                <span class="timer-motiv-txt"></span>
+              </div>
+              <div class="timer-time" id="timerTime">25:00</div>
+              <div class="timer-sub" id="timerSub">Ready to focus</div>
+              <div class="session-dots" id="sessionDots"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Task name lives OUTSIDE the ring so long names get full width and
+             wrap to 2 lines instead of being clipped by the circle. -->
+        <div class="timer-task-line is-hidden" id="timerTaskLine"></div>
+
+        <!-- Custom duration inline input -->
+        <div class="custom-dur-input hidden" id="customDurInput">
+          <input type="number" id="customMinInput" min="1" max="120" placeholder="min" inputmode="numeric">
+          <span class="cdi-unit">min</span>
+          <button id="customMinStart">Start ▶</button>
+          <button id="customMinCancel" title="Cancel">×</button>
+        </div>
+
+        <!-- Big controls -->
+        <div class="controls">
+          <button class="btn-circle" id="resetBtn" title="Reset">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </button>
+          <button class="btn-start" id="startBtn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" id="startIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="startLabel">Start Focus</span>
+          </button>
+          <button class="btn-circle" id="skipBtn" title="Skip / End">
+            <svg width="22" height="22" id="skipIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+          </button>
+        </div>
+
+        <!-- Today's Focus -->
+        <div class="todays-focus">
+          <div class="tf-head" id="tfHead">
+            <span class="tf-title"><span class="ic-slot" data-ic="target"></span> Today's Focus</span>
+            <span class="tf-count" id="tfCount">0 tasks</span>
+            <button class="tf-collapse" id="tfCollapse" title="Collapse">▾</button>
+          </div>
+          <div class="tf-body" id="tfBody">
+            <div class="task-pills" id="taskPills"></div>
+            <div class="task-add-row">
+              <input type="text" id="currentTaskInput" placeholder="Add a task…" maxlength="60" autocomplete="off">
+              <button class="tf-pick" id="tfPickBtn" title="Pick from your Task Manager">＋ Pick</button>
+              <button id="addTaskBtn" title="Add">+</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== VIEW: TASKS ===== -->
+      <section class="view view-tasks" id="viewTasks">
+        <div class="view-head view-head-row">
+          <h2>Tasks</h2>
+          <button class="head-action" id="openCompletedBtn"><span class="ic-slot" data-ic="grid"></span> History</button>
+        </div>
+        <div class="todo-add-row">
+          <input type="text" id="todoInput" placeholder="Add a task — just one tiny thing" maxlength="200" autocomplete="off">
+          <button id="todoAddBtn" title="Add">+</button>
+        </div>
+        <div class="todo-target-row hidden" id="todoTargetRow">
+          <span class="tt-label">Add to</span>
+          <select id="todoTargetGroup"><option value="">No group</option></select>
+        </div>
+        <div class="todo-sort-row">
+          <span class="todo-sort-label">Sort</span>
+          <select id="todoSort">
+            <option value="priority">Priority (1 first)</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="alpha">A → Z</option>
+            <option value="manual">Manual (drag)</option>
+          </select>
+          <span class="todo-sort-spacer"></span>
+          <span class="todo-sort-hint">⠿ drag to reorder</span>
+        </div>
+        <div class="group-add-row">
+          <input type="text" id="groupInput" placeholder="New group — e.g. Work, Personal" maxlength="40" autocomplete="off">
+          <button id="groupAddBtn" title="Add group"><span class="ic-slot" data-ic="folder"></span> +</button>
+        </div>
+        <div class="todo-list" id="todoList"></div>
+        <button class="todo-clear-done hidden" id="todoClearDone">Clear completed</button>
+      </section>
+
+      <!-- ===== VIEW: JOURNAL ===== -->
+      <section class="view view-journal" id="viewJournal">
+        <div class="view-head">
+          <h2>Journal</h2>
+        </div>
+        <div class="history-toolbar">
+          <div class="history-today" id="historyToday">Today: 0 sessions</div>
+          <div class="history-actions">
+            <button class="action-icon" id="heatmapToggleBtn" title="Focus Map">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="4" height="4" rx="1"/><rect x="10" y="3" width="4" height="4" rx="1"/><rect x="17" y="3" width="4" height="4" rx="1"/><rect x="3" y="10" width="4" height="4" rx="1"/><rect x="10" y="10" width="4" height="4" rx="1"/><rect x="17" y="10" width="4" height="4" rx="1"/><rect x="3" y="17" width="4" height="4" rx="1"/><rect x="10" y="17" width="4" height="4" rx="1"/><rect x="17" y="17" width="4" height="4" rx="1"/></svg>
+            </button>
+            <button class="action-icon action-icon-primary" id="addManualBtn" title="Log past work">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Focus Heatmap -->
+        <div class="focus-heatmap hidden" id="focusHeatmap">
+          <div id="fhmGrid"></div>
+          <div class="fhm-legend">
+            <span class="fhm-leg-label">Less</span>
+            <span class="fhm-leg-cell lvl-0"></span>
+            <span class="fhm-leg-cell lvl-1"></span>
+            <span class="fhm-leg-cell lvl-2"></span>
+            <span class="fhm-leg-cell lvl-3"></span>
+            <span class="fhm-leg-cell lvl-4"></span>
+            <span class="fhm-leg-label">More</span>
+          </div>
+        </div>
+
+        <div id="historyList"></div>
+      </section>
+
+      <!-- ===== VIEW: SETTINGS ===== -->
+      <section class="view view-settings" id="viewSettings">
+        <div class="view-head">
+          <h2>Settings</h2>
+        </div>
+
+        <div class="setting-row">
+          <label>Focus Duration</label>
+          <div class="num-input"><input type="number" id="workDuration" min="1" max="90" value="25"><span>min</span></div>
+        </div>
+        <div class="setting-row">
+          <label>Short Break</label>
+          <div class="num-input"><input type="number" id="shortBreakDuration" min="1" max="30" value="5"><span>min</span></div>
+        </div>
+        <div class="setting-row">
+          <label>Long Break</label>
+          <div class="num-input"><input type="number" id="longBreakDuration" min="5" max="60" value="15"><span>min</span></div>
+        </div>
+        <div class="setting-row">
+          <label>Sessions before long break</label>
+          <div class="num-input"><input type="number" id="longBreakInterval" min="2" max="10" value="4"></div>
+        </div>
+        <div class="toggle-row">
+          <span>Auto-start breaks</span>
+          <label class="toggle"><input type="checkbox" id="autoStartBreaks"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>
+        </div>
+        <div class="toggle-row">
+          <span>Auto-start work</span>
+          <label class="toggle"><input type="checkbox" id="autoStartWork"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>
+        </div>
+        <div class="toggle-row">
+          <span>Notifications</span>
+          <label class="toggle"><input type="checkbox" id="notificationsEnabled" checked><span class="toggle-track"><span class="toggle-thumb"></span></span></label>
+        </div>
+        <div class="toggle-row">
+          <span>Haptic feedback</span>
+          <label class="toggle"><input type="checkbox" id="hapticsEnabled" checked><span class="toggle-track"><span class="toggle-thumb"></span></span></label>
+        </div>
+
+        <button class="btn-primary btn-full" id="saveSettings">Save settings</button>
+
+        <div class="divider"></div>
+
+        <button class="settings-link" id="openReminders"><span class="ic-slot" data-ic="clock"></span> Meeting reminders</button>
+        <button class="settings-link" id="openFeedback"><span class="ic-slot" data-ic="chat"></span> Send feedback</button>
+        <button class="settings-link" id="openAbout"><span class="ic-slot" data-ic="info"></span> About Dopamodoro</button>
+      </section>
+
+      <!-- ===== VIEW: COACH / INSIGHTS (free) ===== -->
+      <section class="view view-coach" id="viewCoach">
+        <div class="view-head"><h2>Insights</h2></div>
+
+        <div class="cs-ring-wrap">
+          <svg class="cs-svg" width="180" height="180" viewBox="0 0 180 180">
+            <defs>
+              <linearGradient id="csGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#F59E0B"/>
+                <stop offset="100%" stop-color="#EC4899"/>
+              </linearGradient>
+            </defs>
+            <circle class="cs-ring-bg" cx="90" cy="90" r="78"/>
+            <circle class="cs-ring-prog" id="csRing" cx="90" cy="90" r="78"/>
+          </svg>
+          <div class="cs-center">
+            <div class="cs-score" id="csScore">0</div>
+            <div class="cs-score-lbl">Focus Score</div>
+          </div>
+        </div>
+        <div class="cs-headline" id="csLabel"></div>
+
+        <div class="cs-bars" id="csBars"></div>
+
+        <h3 class="cs-section-title">At a glance</h3>
+        <div class="cs-metrics" id="csMetrics"></div>
+
+        <h3 class="cs-section-title">What I noticed <span class="cs-section-sub" id="nsPatternsSub"></span></h3>
+        <div class="ns-patterns" id="nsPatternsBody"></div>
+
+        <h3 class="cs-section-title">Last 7 days</h3>
+        <div class="cs-week" id="csWeek"></div>
+
+        <h3 class="cs-section-title">Coach tips</h3>
+        <div class="cs-tips" id="csTips"></div>
+
+        <h3 class="cs-section-title">Time by client / project</h3>
+        <div class="client-hours" id="clientHours"></div>
+
+        <h3 class="cs-section-title">Recent wins</h3>
+        <div class="win-vault" id="winVault"></div>
+      </section>
+
+    </main>
+
+    <!-- ========= BOTTOM TAB NAV ========= -->
+    <nav class="bottom-nav">
+      <button class="tab-btn active" data-view="timer">
+        <span class="tab-icon ic-slot" data-ic="timer"></span>
+        <span class="tab-label">Timer</span>
+      </button>
+      <button class="tab-btn" data-view="tasks">
+        <span class="tab-icon ic-slot" data-ic="check2"></span>
+        <span class="tab-label">Tasks</span>
+      </button>
+      <button class="tab-btn" data-view="journal">
+        <span class="tab-icon ic-slot" data-ic="book"></span>
+        <span class="tab-label">Journal</span>
+      </button>
+      <button class="tab-btn" data-view="coach">
+        <span class="tab-icon ic-slot" data-ic="spark"></span>
+        <span class="tab-label">Coach</span>
+      </button>
+      <button class="tab-btn" data-view="settings">
+        <span class="tab-icon ic-slot" data-ic="gear"></span>
+        <span class="tab-label">Settings</span>
+      </button>
+    </nav>
+
+    <!-- Safe area bottom -->
+    <div class="safe-bottom"></div>
+  </div>
+
+  <!-- ========= TOAST ========= -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ========= ONBOARDING FUNNEL ========= -->
+  <div class="onb-overlay hidden" id="onbOverlay">
+    <div class="onb-shell">
+      <div class="onb-top">
+        <div class="onb-progress" id="onbProgress"></div>
+        <button class="onb-skip" id="onbSkip">Skip</button>
+      </div>
+
+      <div class="onb-screens" id="onbScreens">
+
+        <!-- 1 · PAIN HOOK -->
+        <section class="onb-screen active" data-onb="0">
+          <div class="onb-body">
+            <div class="onb-eyebrow">For ADHD brains</div>
+            <h2 class="onb-h">It's not that you're lazy.<br>Starting is just harder for you.</h2>
+            <p class="onb-p">Dopamodoro makes the first step small enough that your brain says yes. Give us 60 seconds and feel the difference.</p>
+          </div>
+          <div class="onb-foot">
+            <button class="onb-cta" data-next>Show me how</button>
+          </div>
+        </section>
+
+        <!-- 2 · TIMER DEMO (do it) -->
+        <section class="onb-screen" data-onb="1">
+          <div class="onb-body">
+            <div class="onb-eyebrow">Step 1 — Start</div>
+            <h2 class="onb-h">One tap. That's the whole trick.</h2>
+            <p class="onb-p">No setup, no guilt. You start, the timer carries you. Try it right now —</p>
+            <button class="onb-demo" id="onbDemo" aria-label="Try a focus tap">
+              <svg viewBox="0 0 120 120" width="150" height="150">
+                <circle class="onb-demo-bg" cx="60" cy="60" r="52"/>
+                <circle class="onb-demo-fill" id="onbDemoFill" cx="60" cy="60" r="52"/>
+              </svg>
+              <span class="onb-demo-label" id="onbDemoLabel">Tap to start</span>
+            </button>
+            <p class="onb-hint" id="onbDemoHint">Next: the reason you'll actually come back.</p>
+          </div>
+          <div class="onb-foot">
+            <button class="onb-cta" data-next>That felt easy</button>
+          </div>
+        </section>
+
+        <!-- 3 · BRAIN DUMP (commitment) -->
+        <section class="onb-screen" data-onb="2">
+          <div class="onb-body">
+            <div class="onb-eyebrow">Step 2 — Unload</div>
+            <h2 class="onb-h">Get it out of your head.</h2>
+            <p class="onb-p">Your brain is for having ideas, not holding them. What's one thing you keep avoiding?</p>
+            <input class="onb-input" type="text" id="onbTask" maxlength="80" placeholder="e.g. the email I've dodged for 3 days">
+          </div>
+          <div class="onb-foot">
+            <button class="onb-cta" data-next>Park it</button>
+          </div>
+        </section>
+
+        <!-- 4 · NORTH STAR / WHY (desire peak) -->
+        <section class="onb-screen" data-onb="3">
+          <div class="onb-body">
+            <div class="onb-eyebrow">Step 3 — Your why</div>
+            <h2 class="onb-h">Most timers track what you do.<br>This one remembers <em>why</em>.</h2>
+            <p class="onb-p">When motivation dips, your North Star pulls you back. What are you really working toward?</p>
+            <input class="onb-input" type="text" id="onbGoal" maxlength="60" placeholder="e.g. Launch my side project">
+            <input class="onb-input" type="text" id="onbWhy" maxlength="120" placeholder="and why it matters to you…">
+          </div>
+          <div class="onb-foot">
+            <button class="onb-cta" data-next>Lock it in</button>
+          </div>
+        </section>
+
+        <!-- 5 · ANTI-SHAME STREAK -->
+        <section class="onb-screen" data-onb="4">
+          <div class="onb-body">
+            <div class="onb-eyebrow">No shame, ever</div>
+            <h2 class="onb-h">Miss a day? Your streak survives.</h2>
+            <p class="onb-p">Other apps punish you for being human. Dopamodoro protects your streak, so one hard day never turns into a spiral of quitting.</p>
+          </div>
+          <div class="onb-foot">
+            <button class="onb-cta" data-next>I'm in</button>
+          </div>
+        </section>
+
+        <!-- 6 · OFFER -->
+        <section class="onb-screen onb-screen-offer" data-onb="5">
+          <div class="onb-body">
+            <div class="onb-eyebrow">You're set up</div>
+            <h2 class="onb-h" id="onbOfferHead">Everything's ready to help you focus.</h2>
+            <ul class="onb-stack">
+              <li>Your AI coach turns your goal into a vivid, all-senses picture that keeps you pulling</li>
+              <li>Unlimited focus folders &amp; North Star goals</li>
+              <li>Streak Freezes that protect your momentum</li>
+              <li>Deep insights that show you when you focus best</li>
+            </ul>
+            <p class="onb-trial">Try Pro free for 7 days. Cancel anytime in Google Play — you're not charged if you cancel before day 7.</p>
+          </div>
+          <div class="onb-foot">
+            <button class="onb-cta onb-cta-offer" id="onbStartTrial">Start 7-day free trial</button>
+            <button class="onb-free" id="onbKeepFree">Keep going free</button>
+            <p class="onb-fine">Free forever includes the timer, tasks &amp; journal.</p>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= TASK DETAIL MODAL (bottom sheet) ========= -->
+  <div class="sheet hidden" id="taskDetailSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 id="tdHeader">Task</h3>
+        <button class="sheet-close" id="closeTaskDetail">×</button>
+      </div>
+      <div class="sheet-body">
+        <label>Task</label>
+        <input type="text" id="tdText" maxlength="200">
+
+        <label>Priority — 1 = most important</label>
+        <div class="pri-picker" id="tdPri">
+          <button data-pri="1" class="pri-btn pri-1">1</button>
+          <button data-pri="2" class="pri-btn pri-2">2</button>
+          <button data-pri="3" class="pri-btn pri-3">3</button>
+          <button data-pri="4" class="pri-btn pri-4">4</button>
+          <button data-pri="5" class="pri-btn pri-5">5</button>
+        </div>
+
+        <label>Due date</label>
+        <div class="td-due-row">
+          <input type="date" id="tdDue">
+          <button type="button" id="tdDueClear" class="btn-link-red">Clear</button>
+        </div>
+
+        <label>Group</label>
+        <select id="tdGroup" class="td-select"><option value="">No group</option></select>
+
+        <label>Notes &amp; ideas</label>
+        <div class="note-list" id="tdNotesList"></div>
+        <div class="note-add-row">
+          <textarea id="tdNoteInput" rows="2" placeholder="Add an idea, link, context…"></textarea>
+          <button id="tdNoteAdd">+</button>
+        </div>
+
+        <label>Subtasks</label>
+        <div class="subtask-list" id="tdSubtaskList"></div>
+        <div class="subtask-add-row">
+          <input type="text" id="tdSubtaskInput" placeholder="Break it down…">
+          <button id="tdSubtaskAdd">+</button>
+        </div>
+
+        <div class="sheet-actions">
+          <button class="btn-link-red" id="tdDelete"><span class="ic-slot" data-ic="trash"></span> Delete</button>
+          <button class="btn-primary btn-full" id="tdSave">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= POST-SESSION TASK REVIEW ========= -->
+  <div class="sheet hidden" id="taskReviewSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Session done</h3>
+        <button class="sheet-close" id="closeTaskReview">×</button>
+      </div>
+      <div class="sheet-body" id="taskReviewBody"></div>
+      <div class="sheet-actions">
+        <button class="btn-link-red" id="trSkip">Not yet</button>
+        <button class="btn-primary btn-full" id="trSave">Mark done ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= MANUAL ENTRY MODAL ========= -->
+  <div class="sheet hidden" id="manualEntrySheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Log past work</h3>
+        <button class="sheet-close" id="closeManualEntry">×</button>
+      </div>
+      <div class="sheet-body">
+        <label>Date</label>
+        <input type="date" id="meDate">
+        <label>Duration (minutes)</label>
+        <input type="number" id="meDuration" min="1" max="480" value="25">
+        <label>What did you work on?</label>
+        <input type="text" id="meTask" maxlength="200" placeholder="The thing you did">
+
+        <div class="sheet-actions">
+          <button class="btn-link-red" id="meCancel">Cancel</button>
+          <button class="btn-primary btn-full" id="meSave">Add to journal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= MEETING REMINDERS SHEET ========= -->
+  <div class="sheet hidden" id="remindersSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Meeting reminders</h3>
+        <button class="sheet-close" id="closeReminders">×</button>
+      </div>
+      <div class="sheet-body">
+        <p class="sheet-hint">Quick nudges so hyperfocus doesn't make you miss things.</p>
+        <label>What's the reminder?</label>
+        <input type="text" id="remLabel" maxlength="60" placeholder="e.g. Standup, Dentist, Call mom">
+        <label>When?</label>
+        <input type="datetime-local" id="remTime">
+        <button class="btn-primary btn-full" id="remAdd" style="margin-top:12px;">Add reminder</button>
+        <div class="rem-list" id="remList" style="margin-top:16px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= TODAY'S FOCUS: FOLDER PICKER ========= -->
+  <div class="sheet hidden" id="folderPickSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Folder / category</h3>
+        <button class="sheet-close" id="closeFolderPick">×</button>
+      </div>
+      <div class="sheet-body" id="folderPickBody"></div>
+    </div>
+  </div>
+
+  <!-- ========= TODAY'S FOCUS: CLIENT / PERSONAL PICKER ========= -->
+  <div class="sheet hidden" id="clientPickSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Client / personal</h3>
+        <button class="sheet-close" id="closeClientPick">×</button>
+      </div>
+      <div class="sheet-body" id="clientPickBody"></div>
+    </div>
+  </div>
+
+  <!-- ========= TODAY'S FOCUS: PICK FROM TASK MANAGER ========= -->
+  <div class="sheet hidden" id="focusPickSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Pick from Task Manager</h3>
+        <button class="sheet-close" id="closeFocusPick">×</button>
+      </div>
+      <div class="sheet-body" id="focusPickBody"></div>
+    </div>
+  </div>
+
+  <!-- ========= GROUP ASSIGN SHEET ========= -->
+  <div class="sheet hidden" id="groupAssignSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 id="gaTitle">Add tasks to group</h3>
+        <button class="sheet-close" id="closeGroupAssign">×</button>
+      </div>
+      <div class="sheet-body" id="groupAssignBody"></div>
+      <div class="sheet-actions">
+        <button class="btn-link-red" id="gaSkip">Skip</button>
+        <button class="btn-primary btn-full" id="gaSave">Add selected</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= COMPLETED HISTORY SHEET ========= -->
+  <div class="sheet hidden" id="completedSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Completed tasks</h3>
+        <button class="sheet-close" id="closeCompleted">×</button>
+      </div>
+      <div class="sheet-body" id="completedBody"></div>
+    </div>
+  </div>
+
+  <!-- ========= DAILY WRAP SHEET ========= -->
+  <div class="sheet hidden" id="wrapSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Wrap up today</h3>
+        <button class="sheet-close" id="closeWrap">×</button>
+      </div>
+      <div class="sheet-body">
+        <p class="sheet-hint">A 30-second close-out. Even one line counts.</p>
+        <div class="wrap-label-row"><label>One win today</label><button type="button" class="wrap-suggest" data-fill="win">Suggest</button></div>
+        <input type="text" id="wrapWin" maxlength="120" placeholder="What went well?">
+        <label>One bit of friction</label>
+        <input type="text" id="wrapFriction" maxlength="120" placeholder="What slowed you down?">
+        <div class="wrap-label-row"><label>Tomorrow's #1 focus</label><button type="button" class="wrap-suggest" data-fill="tomorrow">Suggest</button></div>
+        <input type="text" id="wrapTomorrow" maxlength="120" placeholder="The one thing for tomorrow">
+        <div class="sheet-actions">
+          <button class="btn-link-red" id="wrapCancel">Cancel</button>
+          <button class="btn-primary btn-full" id="wrapSave">Wrap it up</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= ACHIEVEMENTS SHEET ========= -->
+  <div class="sheet hidden" id="achievementsSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>Achievements</h3>
+        <button class="sheet-close" id="closeAchievements">×</button>
+      </div>
+      <div class="sheet-body" id="achievementsBody"></div>
+    </div>
+  </div>
+
+  <!-- ========= NORTH STAR EDIT SHEET ========= -->
+  <div class="sheet hidden" id="northStarSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>North Star</h3>
+        <button class="sheet-close" id="closeNorthStar">×</button>
+      </div>
+      <div class="sheet-body">
+        <p class="sheet-hint">The big-picture goal that guides every session</p>
+        <label>Your goal</label>
+        <input type="text" id="nsInput" maxlength="60" placeholder="e.g. Launch my side project by September">
+
+        <div class="ns-why-card">
+          <div class="ns-why-hint">Picture the ideal life this goal creates. Answer a few — skip freely.</div>
+          <div class="ns-why-pager">
+            <button class="ns-why-arw" id="nsWhyPrev" type="button" aria-label="Previous pillar">‹</button>
+            <div class="ns-why-now">
+              <span class="ns-why-pillar"><span class="ns-why-pillar-ic" id="nsWhyPillarIc"></span><span id="nsWhyPillar">Wealth &amp; Things</span></span>
+              <span class="ns-why-pillar-ix" id="nsWhyPillarIx">PILLAR 1 / 8</span>
+            </div>
+            <button class="ns-why-arw" id="nsWhyNext" type="button" aria-label="Next pillar">›</button>
+          </div>
+          <div class="ns-why-q" id="nsWhyQ"></div>
+          <textarea class="ns-why-input" id="nsWhyA" rows="2" placeholder="In your words…"></textarea>
+          <div class="ns-why-nav">
+            <button class="ns-why-skip" id="nsWhySkip" type="button">Skip</button>
+            <button class="ns-why-save" id="nsWhySaveAns" type="button">Save answer</button>
+          </div>
+          <details class="ns-why-fold">
+            <summary>Saved answers (<span id="nsWhyCount">0</span>)</summary>
+            <div class="ns-why-saved" id="nsWhySaved"></div>
+          </details>
+
+          <div class="ns-vivid-block">
+            <button class="ns-vivid-btn" id="nsVividBtn" type="button"><span id="nsVividLabel">Make it vivid</span></button>
+            <div class="ns-vivid-meta" id="nsVividMeta"></div>
+            <div class="ns-vivid-result is-hidden" id="nsVividResult"></div>
+          </div>
+        </div>
+
+        <div class="sheet-actions">
+          <button class="btn-link-red" id="nsClear" style="display:none">Clear</button>
+          <button class="btn-primary btn-full" id="nsSave">Set North Star</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= GOAL SELECTOR SHEET ========= -->
+  <div class="sheet hidden" id="goalSelectorSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>What are you working on?</h3>
+        <button class="sheet-close" id="closeGoalSelector">×</button>
+      </div>
+      <div class="sheet-body">
+        <div class="goal-list" id="goalList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= JOURNAL ENTRY SHEET ========= -->
+  <div class="sheet hidden" id="journalEntrySheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 id="jeHeader">Session</h3>
+        <button class="sheet-close" id="closeJournalEntry">×</button>
+      </div>
+      <div class="sheet-body">
+        <div class="je-meta" id="jeMeta"></div>
+        <div class="je-split hidden" id="jeSplit"></div>
+        <label>Notes</label>
+        <textarea id="jeNotes" rows="3" placeholder="How did this session go?"></textarea>
+        <div class="sheet-actions">
+          <button class="btn-link-red" id="jeDelete"><span class="ic-slot" data-ic="trash"></span> Delete</button>
+          <button class="btn-primary btn-full" id="jeSave">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= DAY REFLECT SHEET ========= -->
+  <div class="sheet hidden" id="dayReflectSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 id="drHeader">Reflect</h3>
+        <button class="sheet-close" id="closeDayReflect">×</button>
+      </div>
+      <div class="sheet-body">
+        <label>How did the day go?</label>
+        <textarea id="drText" rows="4" placeholder="What worked? What would you do differently?"></textarea>
+        <div class="rating-row">
+          <span class="rating-label">Rate the day</span>
+          <div class="rating-btns" id="drRating">
+            <button class="rating-btn" data-r="1"><span class="ic-slot" data-ic="faceSad"></span></button>
+            <button class="rating-btn" data-r="2"><span class="ic-slot" data-ic="faceMeh"></span></button>
+            <button class="rating-btn" data-r="3"><span class="ic-slot" data-ic="faceGood"></span></button>
+            <button class="rating-btn" data-r="4"><span class="ic-slot" data-ic="faceGreat"></span></button>
+          </div>
+        </div>
+        <div class="sheet-actions">
+          <button class="btn-primary btn-full" id="drSave">Save reflection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========= NOTIFICATION PRE-PERMISSION SHEET ========= -->
+  <div class="sheet hidden" id="notifPrimeSheet">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <div class="np-emoji ic-slot" data-ic="bell"></div>
+        <p class="np-body">Hyperfocus makes time disappear. Let Dopamodoro tap you on the shoulder when a session ends and <strong>nudge you before your streak breaks</strong>.</p>
+        <div class="np-actions">
+          <button class="np-enable" id="notifPrimeEnable">Turn on nudges</button>
+          <button class="np-later" id="notifPrimeLater">Not now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Capacitor runtime (loaded by native shell at runtime — also works in browser dev) -->
+  <script src="capacitor.js"></script>
+  <script src="app.js?v=121" type="module"></script>
+  <script src="billing.js?v=121"></script>
+  <script>
+    // PWA installability for the TWA wrapper (no-op where SW is unsupported).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>
