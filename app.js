@@ -2894,12 +2894,8 @@ async function syncReminderNotifications() {
 // "why" -> anti-shame streak -> Pro trial offer. Each screen earns the next tap.
 let onbIndex = 0;
 function onbScreens() { return [...document.querySelectorAll('#onbScreens .onb-screen')]; }
-function showOnboardingIfNeeded() {
-  if (state.onboardingDone) return;
-  // Returning users (already have data) skip it
-  if ((state.sessionHistory || []).length || (state.todos || []).length || (state.currentTasks || []).length) {
-    state.onboardingDone = true; saveStateDebounced(); return;
-  }
+// Build the progress dots and reveal the funnel from screen 0.
+function onbOpen() {
   const prog = document.getElementById('onbProgress');
   const n = onbScreens().length;
   if (prog && prog.children.length !== n) {
@@ -2907,6 +2903,21 @@ function showOnboardingIfNeeded() {
   }
   onbShow(0);
   document.getElementById('onbOverlay')?.classList.remove('hidden');
+}
+function showOnboardingIfNeeded() {
+  if (state.onboardingDone) return;
+  // Returning users (already have data) skip it
+  if ((state.sessionHistory || []).length || (state.todos || []).length || (state.currentTasks || []).length) {
+    state.onboardingDone = true; saveStateDebounced(); return;
+  }
+  onbOpen();
+}
+// Manually re-run the walkthrough from Settings. Bypasses the returning-user
+// skip so it always plays, and never touches existing tasks/history/streaks.
+function replayOnboarding() {
+  onbIndex = 0;
+  switchView('timer');   // the funnel overlays the timer view
+  onbOpen();
 }
 function onbShow(i) {
   const screens = onbScreens();
@@ -2959,13 +2970,14 @@ function finishOnboarding(startSession) {
   state.onboardingDone = true;
   saveStateDebounced();
   document.getElementById('onbOverlay')?.classList.add('hidden');
+  // Land on the timer primed and ready — their first task is loaded and the ring
+  // shows a full focus block, so the only thing left to do is press Start. This
+  // replaces the old behavior of dropping the user on an empty home screen.
+  switchView('timer');
+  state.mode = 'work';
+  state.sessionDuration = getTotalForMode('work');
   renderAll();
-  if (startSession) {
-    switchView('timer');
-    state.mode = 'work';
-    state.sessionDuration = getTotalForMode('work');
-    startTimer();
-  }
+  if (startSession) startTimer();
 }
 function wireOnboarding() {
   document.querySelectorAll('#onbOverlay [data-next]').forEach(b => b.addEventListener('click', onbNext));
@@ -3190,12 +3202,13 @@ function wire() {
   // Feedback (mailto)
   document.getElementById('openFeedback').addEventListener('click', () => {
     const subject = `Dopamodoro feedback`;
-    const body = `App: Dopamodoro Mobile\nPlatform: ${isNative ? 'Android (native)' : 'Web'}\nVersion: 1.2.2\nSessions: ${state.totalTomatoes}\nStreak: ${state.streak}\n\n--- Tell us what's on your mind ---\n\n`;
+    const body = `App: Dopamodoro Mobile\nPlatform: ${isNative ? 'Android (native)' : 'Web'}\nVersion: 1.2.3\nSessions: ${state.totalTomatoes}\nStreak: ${state.streak}\n\n--- Tell us what's on your mind ---\n\n`;
     window.location.href = `mailto:support@tigerbrandsglobal.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
   document.getElementById('openAbout').addEventListener('click', () => {
-    alert('Dopamodoro\nPomodoro for ADHD brains\nv1.2.2');
+    alert('Dopamodoro\nPomodoro for ADHD brains\nv1.2.3');
   });
+  document.getElementById('replayWalkthrough')?.addEventListener('click', replayOnboarding);
 
   // Task detail sheet
   document.getElementById('closeTaskDetail').addEventListener('click', () => hideSheet('taskDetailSheet'));

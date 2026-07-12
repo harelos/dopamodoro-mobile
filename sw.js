@@ -1,8 +1,8 @@
 // Dopamodoro service worker — minimal, network-first.
 // Exists mainly so the app counts as an installable PWA for the TWA wrapper.
 // Caches the core shell as a fallback for offline; never serves stale over fresh.
-const CACHE = 'dopamodoro-v1-2-2';
-const SHELL = ['./', './index.html', './styles.css?v=122', './app.js?v=122', './billing.js?v=122', './manifest.webmanifest'];
+const CACHE = 'dopamodoro-v1-2-3';
+const SHELL = ['./', './index.html', './styles.css?v=123', './app.js?v=123', './billing.js?v=123', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
