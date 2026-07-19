@@ -3377,7 +3377,7 @@ function wire() {
     document.getElementById('customDurInput').classList.add('hidden');
     state.mode = 'work';
     state.sessionDuration = n * 60;
-    await startTimer();
+    await startTimer(n * 60);   // pass the custom length; startTimer would otherwise recompute the default
   });
   document.getElementById('customMinCancel').addEventListener('click', () => {
     document.getElementById('customDurInput').classList.add('hidden');
