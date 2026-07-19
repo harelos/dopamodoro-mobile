@@ -1480,7 +1480,11 @@ function renderTodos() {
   if (!list) return;
   renderAddTargetGroup();
   const todos = state.todos || [];
-  if (todos.length === 0) {
+  // Only show the "brain dump" empty state when there are NO tasks AND NO folders.
+  // Previously this returned early on empty tasks even when folders existed, so a
+  // newly-created (still empty) folder rendered nothing — it looked like folder
+  // creation was broken. Falling through lets empty folders show their headers.
+  if (todos.length === 0 && !(state.todoGroups || []).length) {
     list.innerHTML = `<div class="todo-empty">
       <div class="todo-empty-icon">${icon('pencil')}</div>
       <div class="todo-empty-title">Brain dump time</div>
