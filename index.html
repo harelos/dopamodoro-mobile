@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=124">
+  <link rel="stylesheet" href="styles.css?v=125">
 </head>
 <body>
   <div class="app">
@@ -162,7 +162,7 @@
 
         <!-- Task-initiation escape hatch: one tap, 2 minutes, guaranteed win -->
         <button class="just-start hidden" id="justStartBtn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          <span class="ic-slot" data-ic="bolt"></span>
           Can't start? Just do 2 minutes
         </button>
 
@@ -744,8 +744,8 @@
 
   <!-- Capacitor runtime (loaded by native shell at runtime — also works in browser dev) -->
   <script src="capacitor.js"></script>
-  <script src="app.js?v=124" type="module"></script>
-  <script src="billing.js?v=124"></script>
+  <script src="app.js?v=125" type="module"></script>
+  <script src="billing.js?v=125"></script>
   <script>
     // PWA installability for the TWA wrapper (no-op where SW is unsupported).
     if ('serviceWorker' in navigator) {

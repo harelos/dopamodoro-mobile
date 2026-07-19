@@ -75,6 +75,7 @@ const IC_P = {
   moon:     '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/>',
   sunrise:  '<path d="M4 16h16M7 16a5 5 0 0 1 10 0M12 3v3M4.5 8.5 6 10M19.5 8.5 18 10M2 20h20"/>',
   bell:     '<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6M10 20a2 2 0 0 0 4 0"/>',
+  share:    '<circle cx="6" cy="12" r="2.4"/><circle cx="17" cy="6" r="2.4"/><circle cx="17" cy="18" r="2.4"/><path d="M8.2 10.9 14.8 7.1M8.2 13.1l6.6 3.8"/>',
   pencil:   '<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="M13.5 6.5l3 3"/>',
   checkCircle:'<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
   trash:    '<path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/>',
@@ -126,6 +127,7 @@ let state = {
   sessionCount: 0,
   todayCount: 0,
   totalTomatoes: 0,
+  focusHours: {},           // histogram hour(0-23) → sessions, powers the daily nudge
   lastSessionDate: null,
   level: 1,
   experience: 0,
@@ -340,6 +342,10 @@ async function handleTimerComplete() {
     state.sessionCount++;
     state.todayCount++;
     state.totalTomatoes++;
+    // Learn when they actually focus, so the daily nudge is personal (not a 9am blast).
+    const _fh = new Date().getHours();
+    state.focusHours = state.focusHours || {};
+    state.focusHours[_fh] = (state.focusHours[_fh] || 0) + 1;
     state.tomatoCoins += 10;
     state.experience += 25;
     if (state.experience >= state.level * 100) {
@@ -416,6 +422,7 @@ async function handleTimerComplete() {
   saveStateDebounced();
   renderAll();
   syncStreakReminder();   // today is now safe → cancels tonight's nudge
+  syncDailyStartNudge();  // re-learn their focus hour, re-arm the daily cue
   maybeOpenTaskReview();
 }
 
@@ -502,6 +509,7 @@ function startTick() {
 const NOTIF_ID = 1001;          // completion alert
 const ONGOING_ID = 1002;        // live, ongoing timer-progress notification
 const STREAK_NOTIF_ID = 1500;   // evening streak-at-risk nudge
+const DAILY_NUDGE_ID = 1501;    // personalized daily "your usual focus time" cue
 const CH_ALERTS = 'timer_alerts';      // high importance: sound + heads-up
 const CH_PROGRESS = 'timer_progress';  // low importance: silent, sticky
 const DEADLINE_ID_BASE = 20000;        // task deadline reminders: 20000..28999
@@ -694,6 +702,37 @@ async function syncStreakReminder() {
       }]
     });
   } catch (e) { console.warn('Streak notif:', e); }
+}
+
+// ==================== PERSONALIZED DAILY START NUDGE ====================
+// A gentle daily cue at the hour the user usually focuses — learned from their own
+// history, never a generic blast. Waits for a real pattern before firing, and
+// re-syncs on launch + after each session so it tracks their rhythm as it shifts.
+function usualFocusHour() {
+  const h = state.focusHours || {};
+  let best = null, bestN = 0, total = 0;
+  for (const k in h) { total += h[k]; if (h[k] > bestN) { bestN = h[k]; best = +k; } }
+  return total >= 5 ? best : null;   // hold off until there's a genuine pattern
+}
+async function syncDailyStartNudge() {
+  if (!LocalNotifications) return;
+  try { await LocalNotifications.cancel({ notifications: [{ id: DAILY_NUDGE_ID }] }); } catch (e) {}
+  if (!state.settings.notificationsEnabled) return;
+  const hour = usualFocusHour();
+  if (hour == null) return;
+  if (!(await hasNotificationPermission())) return;   // silent — never cold-prompts
+  try {
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: DAILY_NUDGE_ID,
+        title: 'Your usual focus time',
+        body: 'A small session now keeps the momentum going. Start when you’re ready.',
+        channelId: CH_ALERTS,
+        smallIcon: 'ic_stat_dopamodoro',
+        schedule: { on: { hour, minute: 0 }, allowWhileIdle: true }   // repeats daily
+      }]
+    });
+  } catch (e) { console.warn('Daily nudge:', e); }
 }
 
 // ==================== DEADLINE REMINDERS ====================
@@ -1745,7 +1784,7 @@ function openCompletedHistory() {
         <span class="ci-check">✓</span>
         <div class="ci-body">
           <div class="ci-text">${escapeHtml(t.text)}</div>
-          ${stc ? `<div class="he-sub">☑ ${stDone}/${stc} subtasks</div>` : ''}
+          ${stc ? `<div class="he-sub">${icon('checkCircle')} ${stDone}/${stc} subtasks</div>` : ''}
         </div>
         <span class="ci-pri badge-pri-${t.priority || 3}">${t.priority || 3}</span>
       </div>`;
@@ -1766,7 +1805,7 @@ function renderTodoCard(t) {
     <div class="todo-body">
       <div class="todo-text">${escapeHtml(t.text)}</div>
       ${(stCount || (!t.done && t.dueDate)) ? `<div class="todo-meta-row">
-        ${stCount ? `<span class="he-sub">☐ ${stDone}/${stCount}</span>` : ''}
+        ${stCount ? `<span class="he-sub">${icon('checkCircle')} ${stDone}/${stCount}</span>` : ''}
         ${(!t.done && t.dueDate) ? `<span class="todo-due ${dueInfo(t.dueDate).cls}">${dueInfo(t.dueDate).label}</span>` : ''}
       </div>` : ''}
     </div>
@@ -1809,8 +1848,8 @@ function renderHistory() {
       <span class="history-day-date">${dayLabel(date)}</span>
       <span class="history-day-meta">${formatDur(mins)} · ${works.length}x</span>
       <div class="history-day-acts">
-        <button class="day-act-btn" data-day="${date}" data-act="reflect" title="Reflect">✍️</button>
-        <button class="day-act-btn" data-day="${date}" data-act="share" title="Share">📤</button>
+        <button class="day-act-btn" data-day="${date}" data-act="reflect" title="Reflect">${icon('pencil')}</button>
+        <button class="day-act-btn" data-day="${date}" data-act="share" title="Share">${icon('share')}</button>
       </div>
     </div>`;
     // Reflection preview
@@ -1889,7 +1928,7 @@ function openGoalSelector() {
       ${state.activeGoal === g.id ? '<span class="goal-opt-check">✓</span>' : ''}
     </button>`).join('');
   html += `<button class="goal-option ${!state.activeGoal ? 'active' : ''}" data-gid="">
-    <span class="goal-opt-icon">⬜</span>
+    <span class="goal-opt-icon">${icon('target')}</span>
     <span class="goal-opt-name">No category</span>
     ${!state.activeGoal ? '<span class="goal-opt-check">✓</span>' : ''}
   </button>`;
@@ -2604,7 +2643,7 @@ function renderClientHours() {
   const fmtH = m => (m / 60 >= 1 ? `${(m / 60).toFixed(1)}h` : `${Math.round(m)}m`);
   const clientTotal = entries.filter(o => o.c.type === 'client').reduce((s, o) => s + o.min, 0);
   el.innerHTML = entries.map(o => `<div class="pb-row"><span class="pb-dot" style="background:${o.c.color}"></span><span class="pb-name">${icon(o.c.type === 'client' ? 'briefcase' : 'home')} ${escapeHtml(o.c.name)}</span><span class="pb-time">${fmtH(o.min)}</span></div>`).join('') +
-    (clientTotal > 0 ? `<button class="pb-export" id="chExport">📤 Export client hours (${fmtH(clientTotal)})</button>` : '');
+    (clientTotal > 0 ? `<button class="pb-export" id="chExport">${icon('share')} Export client hours (${fmtH(clientTotal)})</button>` : '');
   const ex = document.getElementById('chExport');
   if (ex) ex.addEventListener('click', exportClientCSV);
 }
@@ -3621,5 +3660,6 @@ async function initNative() {
   syncDeadlineNotifications();
   syncReminderNotifications();
   syncStreakReminder();
+  syncDailyStartNudge();  // personalized daily cue at their usual focus hour
   // Review is shown when a session completes (handleTimerComplete), not on app launch.
 })();
