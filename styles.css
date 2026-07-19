@@ -702,6 +702,17 @@ input, textarea { -webkit-user-select: auto; user-select: auto; }
   gap: 14px;
   padding: 14px 0 8px;
 }
+/* "Just start · 2 min" — the low-friction escape hatch under the main controls */
+.just-start {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin: 2px auto 6px; padding: 9px 16px;
+  background: color-mix(in srgb, var(--dopa-1) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dopa-1) 35%, transparent);
+  color: var(--dopa-1); border-radius: 999px;
+  font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.just-start:active { transform: scale(0.97); }
+.just-start.hidden { display: none; }
 .btn-circle {
   width: 50px; height: 50px;
   border-radius: 50%;
@@ -1971,6 +1982,66 @@ input, textarea { -webkit-user-select: auto; user-select: auto; }
 .onb-stack li { position: relative; padding-left: 26px; font-size: 14px; line-height: 1.4; color: var(--text); }
 .onb-stack li::before { content: ''; position: absolute; left: 4px; top: 5px; width: 11px; height: 6px; border-left: 2px solid #8B5CF6; border-bottom: 2px solid #8B5CF6; transform: rotate(-45deg); }
 .onb-trial { font-size: 13px; color: var(--text-2); line-height: 1.5; background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.28); border-radius: 12px; padding: 11px 13px; }
+
+/* --- Quiz funnel: tap-only questions --- */
+.onb-h-q { font-size: 23px; }
+.onb-opts { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.onb-opt {
+  width: 100%; text-align: left; padding: 15px 16px; border-radius: 14px; cursor: pointer;
+  font-family: inherit; font-size: 14.5px; font-weight: 700; line-height: 1.35; color: var(--text);
+  background: var(--surface); border: 1.5px solid var(--border-bright);
+  transition: transform 0.1s var(--ease), border-color 0.15s, background 0.15s;
+}
+.onb-opt:active { transform: scale(0.985); }
+.onb-opt.sel {
+  border-color: #A855F7;
+  background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(236,72,153,0.12));
+  box-shadow: 0 0 0 1px rgba(168,85,247,0.4);
+}
+
+/* --- Insight interstitials: the big stat --- */
+.onb-stat {
+  display: flex; align-items: center; gap: 14px; margin-top: 6px;
+  background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.3);
+  border-radius: 14px; padding: 14px 16px;
+}
+.onb-stat-n { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; background: linear-gradient(135deg, #C4B5FD, var(--dopa-1)); -webkit-background-clip: text; background-clip: text; color: transparent; white-space: nowrap; }
+.onb-stat-d { font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.onb-stat-d span { color: var(--text-3); font-size: 11px; }
+
+/* --- Analyzing screen --- */
+.onb-body-center { justify-content: center; align-items: center; text-align: center; gap: 22px; }
+.onb-scan-ring { width: 74px; height: 74px; border-radius: 50%; border: 3px solid rgba(139,92,246,0.18); border-top-color: #A855F7; animation: onbSpin 0.9s linear infinite; }
+@keyframes onbSpin { to { transform: rotate(360deg); } }
+.onb-scan-lines { display: flex; flex-direction: column; gap: 11px; align-items: flex-start; }
+.onb-scan-line { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 700; color: var(--text-3); opacity: 0.25; transition: opacity 0.4s var(--ease), color 0.4s; }
+.onb-scan-line.on { opacity: 1; color: var(--text); }
+.onb-scan-check { color: #22C55E; font-weight: 900; opacity: 0; transition: opacity 0.3s; }
+.onb-scan-line.on .onb-scan-check { opacity: 1; }
+
+/* --- Focus Profile report --- */
+.onb-body-report { justify-content: flex-start; padding-top: 10px; gap: 12px; overflow-y: auto; }
+.onb-h-report { font-size: 24px; background: linear-gradient(135deg, #C4B5FD, var(--dopa-1)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.onb-bars { display: flex; flex-direction: column; gap: 9px; margin: 4px 0; }
+.onb-bar-row { display: grid; grid-template-columns: 108px 1fr auto; align-items: center; gap: 9px; }
+.onb-bar-label { font-size: 11px; font-weight: 800; color: var(--text-2); }
+.onb-bar { height: 7px; border-radius: 7px; background: rgba(255,255,255,0.09); overflow: hidden; }
+.onb-bar-fill { display: block; height: 100%; border-radius: 7px; background: linear-gradient(90deg, #8B5CF6, var(--dopa-1)); animation: onbBarGrow 0.9s var(--ease); }
+.onb-bar-fill.bad { background: linear-gradient(90deg, #F59E0B, #EF4444); }
+@keyframes onbBarGrow { from { width: 0; } }
+.onb-bar-note { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+.onb-findings { display: flex; flex-direction: column; gap: 8px; }
+.onb-findings .onb-p { font-size: 13.5px; }
+
+/* --- Offer screen: countdown hold --- */
+.onb-hold {
+  display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; color: #FBBF24;
+  background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.35);
+  border-radius: 12px; padding: 10px 13px;
+}
+.onb-hold-dot { width: 8px; height: 8px; border-radius: 50%; background: #F59E0B; flex-shrink: 0; animation: onbPulse 1.2s ease-in-out infinite; }
+@keyframes onbPulse { 50% { opacity: 0.35; } }
+.onb-hold strong { font-variant-numeric: tabular-nums; }
 .task-add-row { display: flex; align-items: stretch; gap: 6px; margin-top: 6px; }
 .task-add-row input { flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: inherit; font-size: 13px; padding: 9px 11px; }
 .task-add-row #addTaskBtn { flex-shrink: 0; width: 38px; background: linear-gradient(135deg, var(--dopa-1), var(--dopa-2)); border: none; color: #fff; border-radius: var(--radius-sm); font-size: 20px; font-weight: 700; cursor: pointer; }

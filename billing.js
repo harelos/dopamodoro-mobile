@@ -144,6 +144,11 @@
     }
   }
 
+  function fmtMoney(micros, currency) {
+    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(micros / 1e6); }
+    catch { return `${currency} ${(micros / 1e6).toFixed(2)}`; }
+  }
+
   async function refreshPrices() {
     if (backend === 'cdv' && store) {
       const P = window.CdvPurchase.Platform.GOOGLE_PLAY;
@@ -151,8 +156,12 @@
         try {
           const prod = store.get(p.id, P);
           const offer = prod?.getOffer?.();
-          const price = offer?.pricingPhases?.slice(-1)[0]?.price || prod?.pricing?.price;
+          const phase = offer?.pricingPhases?.slice(-1)[0];
+          const price = phase?.price || prod?.pricing?.price;
+          const micros = phase?.priceMicros ?? prod?.pricing?.priceMicros;
+          const currency = phase?.currency || prod?.pricing?.currency;
           if (price) { p.price = price; p.per = ''; }
+          if (micros) { p.micros = micros; p.currency = currency; }
         } catch {}
       });
     } else if (backend === 'dga' && dgs) {
@@ -164,6 +173,7 @@
           if (amt && amt.value != null) {
             const cur = amt.currency === 'USD' ? '$' : (amt.currency + ' ');
             p.price = `${cur}${amt.value}`; p.per = '';
+            p.micros = Math.round(parseFloat(amt.value) * 1e6); p.currency = amt.currency;
           }
         });
       } catch (e) { console.warn('[billing] getDetails failed', e); }
@@ -178,8 +188,20 @@
 
     if (backend === 'cdv') {
       try {
-        const offer = store.get(p.id, window.CdvPurchase.Platform.GOOGLE_PLAY)?.getOffer?.();
-        if (!offer) { toast('That plan is still loading — try again in a moment.'); return; }
+        const P = window.CdvPurchase.Platform.GOOGLE_PLAY;
+        let offer = store.get(p.id, P)?.getOffer?.();
+        if (!offer) {
+          // Product details may not have arrived yet (or just landed after a
+          // Console change) — force a refresh once before giving up.
+          toast('Loading plan…');
+          try { await store.update(); } catch {}
+          offer = store.get(p.id, P)?.getOffer?.();
+        }
+        if (!offer) {
+          toast('This plan isn\'t available on your Play account yet — try again shortly.');
+          console.warn('[billing] no offer for', p.id, '— product not returned by Play (check regional availability / track install)');
+          return;
+        }
         await store.order(offer);
         // entitlement flips via the verified/receiptUpdated handlers; close on success.
       } catch (e) {
@@ -231,6 +253,30 @@
   }
 
   // ---------- paywall UI ----------
+  // Personalization pulled from the onboarding quiz (cached at boot).
+  let quiz = {};              // { pattern, goal, ... }
+  let offerDeadline = 0;      // shared countdown with the onboarding offer
+  let pwCountdown = null;
+
+  function pwHeadline() {
+    const pain = {
+      scroll:    'Stop losing your mornings to the scroll.',
+      drift:     'Stop watching your focus fade mid-task.',
+      choose:    'Stop burning energy deciding where to start.',
+      interrupt: 'Stop letting one interruption eat the whole day.'
+    }[quiz.pattern];
+    return pain || 'Stop losing 2+ hours a day to distraction.';
+  }
+  function pwSubline() {
+    const goal = {
+      work:    'your work moving',
+      study:   'your studying done in less time',
+      project: 'real progress on your project every week',
+      life:    'your days calm and in control'
+    }[quiz.goal] || 'real progress every single day';
+    return `Pro makes starting automatic and keeps ${goal} — even on your worst days.`;
+  }
+
   // `trigger` is just for future analytics on which touchpoint converted.
   function openPaywall(trigger) {
     if (isProNow()) { toast('You\'re already Pro ✓'); return; }
@@ -241,22 +287,25 @@
       ov.addEventListener('click', e => { if (e.target === ov) closePaywall(); });
     }
     ov.dataset.trigger = trigger || 'manual';
+    const holdLeft = offerDeadline - Date.now();
     ov.innerHTML = `
       <div class="pw-sheet" id="pwSheet">
         <button class="pw-close" id="pwClose" aria-label="Close">×</button>
         <div class="pw-head">
-          <div class="pw-title">Dopamodoro Pro</div>
-          <div class="pw-sub">Your focus, coached. Unlock the AI coach, unlimited folders &amp; goals, and your North Star in full.</div>
+          <div class="pw-title">${pwHeadline()}</div>
+          <div class="pw-sub">${pwSubline()}</div>
         </div>
         <ul class="pw-benefits">
-          <li>AI Focus Coach + weekly analysis</li>
-          <li>North Star “make it vivid” (all 5 senses) &amp; paths</li>
-          <li>Unlimited folders &amp; North Star goals</li>
-          <li>Streak freezes, deep insights, daily-wrap suggestions</li>
+          <li><b>One-tap start ritual</b> — the first step your brain says yes to</li>
+          <li><b>AI Focus Coach</b> — weekly analysis of when &amp; where you focus best</li>
+          <li><b>Vivid North Star</b> — your goal in all 5 senses when motivation dips</li>
+          <li><b>Streak Freeze</b> — a bad day never becomes quitting</li>
+          <li><b>Unlimited folders &amp; goals</b> — every project gets a home</li>
         </ul>
+        ${holdLeft > 0 ? `<div class="pw-hold"><span class="pw-hold-dot"></span>Your intro price is held for <b id="pwCountdown">…</b></div>` : ''}
         <div class="pw-plans" id="pwPlans"></div>
-        <button class="pw-cta" id="pwCta">Start 7-day free trial</button>
-        <div class="pw-fine">Cancel anytime in Google Play. Trial applies to Monthly &amp; Yearly.</div>
+        <button class="pw-cta" id="pwCta">Start my 7 free days</button>
+        <div class="pw-fine" id="pwFine">No charge today. Google Play reminds you before the trial ends — cancel in 10 seconds, keep everything you wrote.</div>
         <button class="pw-restore" id="pwRestore">Restore purchases</button>
       </div>`;
     ov.classList.add('open');
@@ -264,20 +313,46 @@
     ov.querySelector('#pwClose').addEventListener('click', closePaywall);
     ov.querySelector('#pwRestore').addEventListener('click', restore);
     ov.querySelector('#pwCta').addEventListener('click', () => buy(selectedKey));
+    if (holdLeft > 0) startPwCountdown();
   }
-  function closePaywall() { document.getElementById('pwOverlay')?.classList.remove('open'); }
+  function startPwCountdown() {
+    if (pwCountdown) clearInterval(pwCountdown);
+    const tick = () => {
+      const left = Math.max(0, offerDeadline - Date.now());
+      const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+      const e = document.getElementById('pwCountdown');
+      if (e) e.textContent = `${m}:${String(s).padStart(2, '0')}`;
+      if (left <= 0) { clearInterval(pwCountdown); pwCountdown = null; document.querySelector('.pw-hold')?.remove(); }
+    };
+    tick(); pwCountdown = setInterval(tick, 1000);
+  }
+  function closePaywall() {
+    if (pwCountdown) { clearInterval(pwCountdown); pwCountdown = null; }
+    document.getElementById('pwOverlay')?.classList.remove('open');
+  }
 
   function renderPlans() {
     const wrap = document.getElementById('pwPlans'); if (!wrap) return;
     const order = ['yearly', 'monthly', 'lifetime'];
+    const m = PRODUCTS.monthly, y = PRODUCTS.yearly;
+    // Real anchor: 12 months at the monthly rate vs the yearly price (localized).
+    let anchor = '', savePct = 50;
+    if (m.micros && y.micros && m.currency === y.currency) {
+      anchor = fmtMoney(m.micros * 12, m.currency);
+      savePct = Math.max(0, Math.round((1 - y.micros / (m.micros * 12)) * 100));
+    }
     wrap.innerHTML = order.map(k => {
       const p = PRODUCTS[k];
       const hero = k === 'yearly';
+      const tag = hero
+        ? `7-day free trial · ${anchor ? `<s>${anchor}</s> → ` : ''}save ${savePct}%`
+        : k === 'monthly' ? '7-day free trial · cancel anytime'
+        : 'Pay once, yours forever — never a renewal';
       return `<button class="pw-plan${selectedKey === k ? ' sel' : ''}${hero ? ' hero' : ''}" data-k="${k}">
-        ${hero ? '<span class="pw-plan-flag">Best value</span>' : ''}
+        ${hero ? `<span class="pw-plan-flag">Best value · save ${savePct}%</span>` : ''}
         <span class="pw-plan-name">${k === 'lifetime' ? 'Lifetime' : k[0].toUpperCase() + k.slice(1)}</span>
         <span class="pw-plan-price">${p.price}<em>${p.per}</em></span>
-        <span class="pw-plan-tag">${p.tag}</span>
+        <span class="pw-plan-tag">${tag}</span>
       </button>`;
     }).join('');
     wrap.querySelectorAll('.pw-plan').forEach(b => b.addEventListener('click', () => {
@@ -286,8 +361,16 @@
     syncCta();
   }
   function syncCta() {
-    const cta = document.getElementById('pwCta'); if (!cta) return;
-    cta.textContent = selectedKey === 'lifetime' ? 'Unlock Lifetime' : 'Start 7-day free trial';
+    const cta = document.getElementById('pwCta');
+    const fine = document.getElementById('pwFine');
+    if (!cta) return;
+    if (selectedKey === 'lifetime') {
+      cta.textContent = 'Unlock Lifetime — pay once';
+      if (fine) fine.textContent = 'One payment, every Pro feature forever. No subscription, no renewals.';
+    } else {
+      cta.textContent = 'Start my 7 free days';
+      if (fine) fine.textContent = 'No charge today. Google Play reminds you before the trial ends — cancel in 10 seconds, keep everything you wrote.';
+    }
   }
 
   // ---------- styles (self-contained) ----------
@@ -310,6 +393,11 @@
   .pw-plan-price{margin-left:auto;font-size:15px;font-weight:800;}
   .pw-plan-price em{font-style:normal;font-size:11px;color:#BBB0CE;font-weight:600;}
   .pw-plan-tag{flex-basis:100%;font-size:10.5px;color:#A597C9;}
+  .pw-plan-tag s{color:#706089;}
+  .pw-hold{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#FBBF24;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:8px 12px;margin-bottom:12px;}
+  .pw-hold b{font-variant-numeric:tabular-nums;}
+  .pw-hold-dot{width:7px;height:7px;border-radius:50%;background:#F59E0B;flex-shrink:0;animation:pwPulse 1.2s ease-in-out infinite;}
+  @keyframes pwPulse{50%{opacity:.35;}}
   .pw-plan.hero .pw-plan-tag{color:#F59E0B;}
   .pw-cta{width:100%;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#C2410C,#9A3412);color:#fff;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 4px 16px rgba(154,52,18,.4);}
   .pw-fine{font-size:10px;color:#706089;text-align:center;margin-top:9px;line-height:1.4;}
@@ -323,8 +411,13 @@
   // ---------- boot ----------
   async function boot() {
     injectCss();
-    // Seed the cached entitlement from storage (source of truth on cold start).
-    try { const s = await readStore(); _isPro = !!s.isPremium; } catch {}
+    // Seed the cached entitlement + quiz personalization from storage.
+    try {
+      const s = await readStore();
+      _isPro = !!s.isPremium;
+      quiz = s.onboardingQuiz || {};
+      offerDeadline = s.onbOfferDeadline || 0;
+    } catch {}
     updateProUI(_isPro);
     const go = document.getElementById('goProBtn');
     if (go) go.addEventListener('click', () => openPaywall('header'));
@@ -340,6 +433,9 @@
     openPaywall,
     closePaywall,
     restore,
+    // Live handoff from the onboarding quiz (storage writes are debounced, so
+    // the first paywall open right after the quiz needs the data pushed in).
+    personalize(d) { if (d?.quiz) quiz = d.quiz; if (d?.deadline) offerDeadline = d.deadline; },
     // Call before a Pro-only action; returns true if allowed, else opens paywall.
     requirePro(trigger) { if (isProNow()) return true; openPaywall(trigger); return false; }
   };

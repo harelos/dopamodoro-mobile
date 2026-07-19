@@ -257,10 +257,12 @@ function getTotalForMode(mode) {
   }
 }
 
-async function startTimer() {
-  const seconds = state.isPaused && state.pausedTimeLeft != null
-    ? state.pausedTimeLeft
-    : getTotalForMode(state.mode);
+async function startTimer(overrideSeconds) {
+  const seconds = overrideSeconds != null
+    ? overrideSeconds
+    : (state.isPaused && state.pausedTimeLeft != null
+        ? state.pausedTimeLeft
+        : getTotalForMode(state.mode));
 
   state.isRunning = true;
   state.isPaused = false;
@@ -273,6 +275,20 @@ async function startTimer() {
   saveStateDebounced();
   renderAll();
   haptic('light');
+}
+
+// "Just start": the ADHD task-initiation escape hatch. One tap → a 2-minute work
+// session, no duration to pick, no task required. A short guaranteed win beats a
+// perfect plan you never begin. It still counts as a full focus session (tomato +
+// streak), so the reward loop fires and momentum carries into more.
+async function justStart() {
+  if (state.isRunning) return;
+  state.mode = 'work';
+  state.isPaused = false;
+  state.pausedTimeLeft = null;
+  await startTimer(2 * 60);
+  haptic('medium');
+  toast('2 minutes. Just begin — that’s the whole job.');
 }
 
 async function pauseTimer() {
@@ -657,8 +673,15 @@ async function syncStreakReminder() {
   if ((state.streak || 0) < 2) return;                       // nothing worth protecting yet
   if (state.lastSessionDate === new Date().toDateString()) return; // already safe today
   if (!(await hasNotificationPermission())) return;          // silent — no cold prompt
-  const at = new Date(); at.setHours(20, 0, 0, 0);           // tonight, 8pm
-  if (at.getTime() <= Date.now() + 60000) return;            // past 8pm already — skip
+  const at = new Date(); at.setHours(20, 0, 0, 0);           // default: tonight, 8pm
+  const now = Date.now();
+  if (at.getTime() <= now + 60000) {
+    // Opened after 8pm and the streak is still at risk — don't lose the nudge.
+    // Fire ~25 min out, unless that would land past 11pm (too close to midnight).
+    const lateCutoff = new Date(); lateCutoff.setHours(23, 0, 0, 0);
+    if (now + 25 * 60000 > lateCutoff.getTime()) return;
+    at.setTime(now + 25 * 60000);
+  }
   try {
     await LocalNotifications.schedule({
       notifications: [{
@@ -989,6 +1012,8 @@ function renderDurationChips() {
   if (!wrap) return;
   const visible = state.mode === 'work' && !state.isRunning && !state.isPaused;
   wrap.classList.toggle('hidden', !visible);
+  // The "Just start · 2 min" escape hatch shares the same idle-work visibility.
+  document.getElementById('justStartBtn')?.classList.toggle('hidden', !visible);
   const current = state.settings.workDuration;
   wrap.querySelectorAll('.dur-chip').forEach(b => {
     const m = b.dataset.min;
@@ -2888,21 +2913,169 @@ async function syncReminderNotifications() {
   if (toSchedule.length) { try { await LocalNotifications.schedule({ notifications: toSchedule }); } catch (e) { console.warn('Reminder notif:', e); } }
 }
 
-// ==================== ONBOARDING ====================
-// ==================== ONBOARDING FUNNEL ====================
-// Skippable premium tour: pain hook -> one-tap timer -> brain-dump -> North Star
-// "why" -> anti-shame streak -> Pro trial offer. Each screen earns the next tap.
+// ==================== ONBOARDING FUNNEL (QUIZ) ====================
+// Non-skippable quiz funnel: hook → 7 tap-only questions with personalized
+// insight interstitials (pain → cost → failed alternatives → stakes → hope)
+// → "analyzing" → personalized Focus Profile report → offer.
+// Wording is Play-policy-safe: "focus profile", never diagnosis/medical claims.
 let onbIndex = 0;
-function onbScreens() { return [...document.querySelectorAll('#onbScreens .onb-screen')]; }
-// Build the progress dots and reveal the funnel from screen 0.
-function onbOpen() {
+let onbAnswers = {};        // { pattern, pulls, tried, goal, cost, streak, change }
+let onbReplay = false;      // opened from Settings after completion → allow ✕
+let onbCountdownTimer = null;
+
+// ---- Quiz content -----------------------------------------------------------
+const ONB_ARCHETYPES = {
+  scroll:    { name: 'The Scroll-First Starter',  finding: 'Your hardest moment is the first 60 seconds — the phone wins before the task even begins.' },
+  drift:     { name: 'The Fast-Fade Focuser',     finding: 'You can start — but your focus fades before the work gets deep enough to count.' },
+  choose:    { name: 'The Overloaded Chooser',    finding: 'Too many open loops. Deciding what to do first costs you more energy than doing it.' },
+  interrupt: { name: 'The Derailed Deep-Worker',  finding: 'You focus well — until one interruption unravels the rest of your day.' }
+};
+
+const ONB_STEPS = [
+  // 0 · HOOK — the reason to answer: we build them a personalized focus profile
+  { type: 'info', eyebrow: 'Free 60-second focus check', cta: 'Start my focus check',
+    h: `Let's map how <em>your</em> brain focuses.`,
+    p: `Answer 7 quick taps — no typing. You'll get your personal <strong>Focus Profile</strong>: what breaks your focus, what it's costing you, and a plan built around how you actually work.` },
+
+  // 1 · Q1 — problem admission + segmentation (sets the archetype)
+  { type: 'quiz', key: 'pattern', eyebrow: 'Question 1 of 7',
+    h: 'When you sit down to do something important, what actually happens?',
+    opts: [
+      { v: 'scroll',    t: `I pick up my phone before I even start` },
+      { v: 'drift',     t: `I start fine, then drift off after a few minutes` },
+      { v: 'choose',    t: `I freeze — I can't decide what to do first` },
+      { v: 'interrupt', t: `I'm fine until one interruption derails everything` }
+    ] },
+
+  // 2 · INSIGHT A — mirror their answer, name the mechanism, drop the 23-min stat
+  { type: 'insight', eyebrow: 'That answer says a lot', cta: 'That explains a lot',
+    render: a => {
+      const line = {
+        scroll:    `Reaching for the phone before starting isn't laziness — it's your brain picking the <strong>easiest available start</strong>. The task never stood a chance.`,
+        drift:     `Starting isn't your problem — <strong>staying anchored</strong> is. Without a visible container around the work, attention leaks out fast.`,
+        choose:    `That freeze is real: every open task quietly competes for your attention, and choosing burns the energy you needed for doing.`,
+        interrupt: `Here's the brutal part about interruptions:`
+      }[a.pattern] || '';
+      return { h: `You're not broken. Your start ritual is.`,
+        p: line,
+        stat: { n: '23 min', d: `is how long it takes on average to fully refocus after a single interruption <span>(University of California, Irvine research)</span>` } };
+    } },
+
+  // 3 · Q2 — quantify the pain (they self-report the cost)
+  { type: 'quiz', key: 'pulls', eyebrow: 'Question 2 of 7',
+    h: 'Be honest — how often does your phone pull you away mid-task?',
+    opts: [
+      { v: 'lost',   t: `Honestly? I've lost count` },
+      { v: 'ten',    t: `10+ times a day` },
+      { v: 'few',    t: `A few times a day` },
+      { v: 'rarely', t: `Rarely — my problem is starting, not stopping` }
+    ] },
+
+  // 4 · INSIGHT B — do the cost math for them (pain made concrete)
+  { type: 'insight', eyebrow: 'The hidden cost', cta: `I want those hours back`,
+    render: a => {
+      const p = (a.pulls === 'rarely')
+        ? `Even so — every false start costs you twice: the time itself, plus the guilt that makes the <strong>next</strong> start harder. That loop is the real thief.`
+        : `And every one of those pulls can cost you that 23-minute refocus. That's how a whole afternoon disappears without anything getting done — and why it feels like the day "evaporated".`;
+      return { h: `This is where your time is going.`,
+        p,
+        stat: { n: '96×', d: `a day — how often the average person checks their phone <span>(dscout research)</span>. For distractible brains, it's usually more.` } };
+    } },
+
+  // 5 · Q3 — kill the alternatives they already tried
+  { type: 'quiz', key: 'tried', eyebrow: 'Question 3 of 7',
+    h: `What have you already tried to fix this?`,
+    opts: [
+      { v: 'lists',     t: `To-do list apps` },
+      { v: 'timers',    t: `Regular pomodoro timers` },
+      { v: 'willpower', t: `Pure willpower and guilt` },
+      { v: 'all',       t: `All of it. Nothing sticks.` }
+    ] },
+
+  // 6 · INSIGHT C — why those failed: unique-mechanism pivot
+  { type: 'insight', eyebrow: `Why it didn't stick`, cta: `So it wasn't my fault`,
+    render: a => {
+      const line = {
+        lists:     `To-do lists tell you <strong>what</strong> to do. But your bottleneck was never knowing what — it's <strong>starting</strong>. That's why the list keeps growing while nothing moves.`,
+        timers:    `A plain timer assumes starting is easy and shame is motivating. For a brain like yours, both assumptions are wrong — so the timer became one more thing you quit.`,
+        willpower: `Willpower is a battery, not a strategy. Every "just force yourself" drains it — and the guilt afterward makes tomorrow's start even heavier.`,
+        all:       `Of course nothing stuck — every one of those tools assumes starting is the easy part. For your brain, starting IS the hard part. None of them were built for that.`
+      }[a.tried] || '';
+      return { h: `The tools failed you.<br>Not the other way around.`,
+        p: line + ` What works is making the first step so small your brain says yes — then protecting the momentum. That's the entire system you're about to see.` };
+    } },
+
+  // 7 · Q4 — stakes: what the focus is FOR (personalizes the offer)
+  { type: 'quiz', key: 'goal', eyebrow: 'Question 4 of 7',
+    h: `What matters most for you to move forward on right now?`,
+    opts: [
+      { v: 'work',    t: `My work or business` },
+      { v: 'study',   t: `My studies` },
+      { v: 'project', t: `A personal project or dream` },
+      { v: 'life',    t: `Just getting my life in order` }
+    ] },
+
+  // 8 · Q5 — cost of inaction (loss aversion; they say it themselves)
+  { type: 'quiz', key: 'cost', eyebrow: 'Question 5 of 7',
+    h: `If nothing changes — where does that leave you a year from now?`,
+    opts: [
+      { v: 'same',   t: `Same place. And that frustrates me.` },
+      { v: 'behind', t: `Further behind people around me` },
+      { v: 'scared', t: `Honestly? It scares me a little.` },
+      { v: 'avoid',  t: `I try not to think about it` }
+    ] },
+
+  // 9 · INSIGHT D — the hope pivot: small consistent starts compound
+  { type: 'insight', eyebrow: 'Now the good news', cta: `Show me how`,
+    render: a => {
+      const goalWord = { work: 'your work', study: 'your studies', project: 'that project', life: 'your life' }[a.goal] || 'what matters';
+      return { h: `A year from now can look completely different.`,
+        p: `You don't need to become a different person. One protected 25-minute block a day, aimed at ${goalWord}, compounds fast — and the only skill it needs is a reliable way to <strong>start</strong>.`,
+        stat: { n: '150+ hrs', d: `of real, focused progress a year — from just one 25-minute block a day` } };
+    } },
+
+  // 10 · Q6 — streak psychology (sets up the momentum-protection benefit)
+  { type: 'quiz', key: 'streak', eyebrow: 'Question 6 of 7',
+    h: `When you break a streak in an app, what usually happens?`,
+    opts: [
+      { v: 'quit',  t: `I quit the whole app within a week` },
+      { v: 'guilt', t: `I feel guilty but keep going` },
+      { v: 'avoid', t: `Streaks stress me out, so I avoid them` },
+      { v: 'never', t: `Never kept one long enough to break it` }
+    ] },
+
+  // 11 · Q7 — assumptive close: they state the benefit themselves
+  { type: 'quiz', key: 'change', eyebrow: 'Last question',
+    h: `Imagine starting was the easy part. How different would your days look?`,
+    opts: [
+      { v: 'better',     t: `Noticeably better` },
+      { v: 'different',  t: `Very different` },
+      { v: 'everything', t: `It would change everything` }
+    ] },
+
+  // 12 · ANALYZING — labor illusion; builds the perceived value of the report
+  { type: 'analyzing', eyebrow: 'Building your Focus Profile',
+    lines: ['Reading your 7 answers…', 'Mapping your distraction triggers…', 'Locating where your hours leak…', 'Matching a start ritual to your pattern…', 'Your Focus Profile is ready.'] },
+
+  // 13 · REPORT — the personalized value they came for; pushes app as the fix
+  { type: 'report', cta: 'See my plan in action' },
+
+  // 14 · OFFER — direct-response close with real anchor + soft scarcity
+  { type: 'offer' }
+];
+
+// ---- Engine -----------------------------------------------------------------
+function onbEl() { return document.getElementById('onbScreens'); }
+
+function onbOpen(replay) {
+  onbReplay = !!replay;
+  onbIndex = 0;
+  onbAnswers = state.onboardingQuiz || {};
   const prog = document.getElementById('onbProgress');
-  const n = onbScreens().length;
-  if (prog && prog.children.length !== n) {
-    prog.innerHTML = Array.from({ length: n }, () => '<span class="onb-dot"><span></span></span>').join('');
-  }
-  onbShow(0);
+  if (prog) prog.innerHTML = ONB_STEPS.map(() => '<span class="onb-dot"><span></span></span>').join('');
+  document.getElementById('onbExitReplay')?.classList.toggle('hidden', !onbReplay);
   document.getElementById('onbOverlay')?.classList.remove('hidden');
+  onbShow(0);
 }
 function showOnboardingIfNeeded() {
   if (state.onboardingDone) return;
@@ -2910,69 +3083,182 @@ function showOnboardingIfNeeded() {
   if ((state.sessionHistory || []).length || (state.todos || []).length || (state.currentTasks || []).length) {
     state.onboardingDone = true; saveStateDebounced(); return;
   }
-  onbOpen();
+  onbOpen(false);
 }
 // Manually re-run the walkthrough from Settings. Bypasses the returning-user
 // skip so it always plays, and never touches existing tasks/history/streaks.
 function replayOnboarding() {
-  onbIndex = 0;
   switchView('timer');   // the funnel overlays the timer view
-  onbOpen();
+  onbOpen(true);
 }
+
 function onbShow(i) {
-  const screens = onbScreens();
-  i = Math.max(0, Math.min(i, screens.length - 1));
+  i = Math.max(0, Math.min(i, ONB_STEPS.length - 1));
   onbIndex = i;
-  screens.forEach((s, idx) => s.classList.toggle('active', idx === i));
   document.querySelectorAll('#onbProgress .onb-dot').forEach((d, idx) => {
     d.classList.toggle('done', idx < i);
     d.classList.toggle('current', idx === i);
   });
-  if (i === screens.length - 1) onbUpdateOffer();
-  const inp = screens[i].querySelector('.onb-input');
-  if (inp) setTimeout(() => { try { inp.focus(); } catch {} }, 360);
+  onbRender(ONB_STEPS[i]);
 }
 function onbNext() { onbShow(onbIndex + 1); }
-function onbUpdateOffer() {
-  const goal = (document.getElementById('onbGoal')?.value || '').trim();
-  const head = document.getElementById('onbOfferHead');
-  if (head) head.textContent = goal
-    ? `You're set up to ${goal.charAt(0).toLowerCase() + goal.slice(1)}.`
-    : "Everything's ready to help you focus.";
+
+function onbRender(step) {
+  const host = onbEl(); if (!host) return;
+  if (onbCountdownTimer) { clearInterval(onbCountdownTimer); onbCountdownTimer = null; }
+  let html = '';
+  if (step.type === 'info') {
+    html = `<section class="onb-screen active"><div class="onb-body">
+      <div class="onb-eyebrow">${step.eyebrow}</div>
+      <h2 class="onb-h">${step.h}</h2><p class="onb-p">${step.p}</p>
+      </div><div class="onb-foot"><button class="onb-cta" data-next>${step.cta}</button></div></section>`;
+  } else if (step.type === 'quiz') {
+    html = `<section class="onb-screen active"><div class="onb-body">
+      <div class="onb-eyebrow">${step.eyebrow}</div>
+      <h2 class="onb-h onb-h-q">${step.h}</h2>
+      <div class="onb-opts">${step.opts.map(o =>
+        `<button class="onb-opt${onbAnswers[step.key] === o.v ? ' sel' : ''}" data-v="${o.v}">${o.t}</button>`).join('')}
+      </div></div></section>`;
+  } else if (step.type === 'insight') {
+    const r = step.render(onbAnswers);
+    html = `<section class="onb-screen active"><div class="onb-body">
+      <div class="onb-eyebrow">${step.eyebrow}</div>
+      <h2 class="onb-h">${r.h}</h2><p class="onb-p">${r.p}</p>
+      ${r.stat ? `<div class="onb-stat"><div class="onb-stat-n">${r.stat.n}</div><div class="onb-stat-d">${r.stat.d}</div></div>` : ''}
+      </div><div class="onb-foot"><button class="onb-cta" data-next>${step.cta}</button></div></section>`;
+  } else if (step.type === 'analyzing') {
+    html = `<section class="onb-screen active"><div class="onb-body onb-body-center">
+      <div class="onb-eyebrow">${step.eyebrow}</div>
+      <div class="onb-scan-ring"><span></span></div>
+      <div class="onb-scan-lines">${step.lines.map(l => `<div class="onb-scan-line"><span class="onb-scan-check">✓</span>${l}</div>`).join('')}</div>
+      </div></section>`;
+  } else if (step.type === 'report') {
+    html = onbReportHtml(step);
+  } else if (step.type === 'offer') {
+    html = onbOfferHtml();
+  }
+  host.innerHTML = html;
+  onbWireStep(step);
 }
-// Persist whatever they typed — even if they skip or bail to free.
-function onbCommit() {
-  const taskTxt = (document.getElementById('onbTask')?.value || '').trim().slice(0, 80);
-  if (taskTxt) {
-    state.todos = state.todos || [];
-    state.todos.unshift({
-      id: 'td' + Date.now() + Math.random().toString(36).slice(2, 6),
-      text: taskTxt, done: false, priority: 3, notes: [], subtasks: [],
-      goalId: null, dueDate: null, groupId: null,
-      createdAt: new Date().toISOString(), completedAt: null
+
+function onbWireStep(step) {
+  const host = onbEl();
+  host.querySelector('[data-next]')?.addEventListener('click', onbNext);
+  if (step.type === 'quiz') {
+    host.querySelectorAll('.onb-opt').forEach(b => b.addEventListener('click', () => {
+      host.querySelectorAll('.onb-opt').forEach(x => x.classList.remove('sel'));
+      b.classList.add('sel');
+      onbAnswers[step.key] = b.dataset.v;
+      state.onboardingQuiz = onbAnswers; saveStateDebounced();
+      haptic('light');
+      setTimeout(onbNext, 320);   // brief confirm-flash, then momentum
+    }));
+  }
+  if (step.type === 'analyzing') {
+    const lines = [...host.querySelectorAll('.onb-scan-line')];
+    lines.forEach((l, i) => setTimeout(() => l.classList.add('on'), 450 + i * 620));
+    setTimeout(onbNext, 450 + lines.length * 620 + 700);
+  }
+  if (step.type === 'offer') {
+    host.querySelector('#onbStartTrial')?.addEventListener('click', () => {
+      finishOnboarding(false);
+      if (window.Billing) {
+        window.Billing.personalize?.({ quiz: onbAnswers, deadline: state.onbOfferDeadline });
+        window.Billing.openPaywall('onboarding');
+      }
     });
-    state.currentTasks = state.currentTasks || [];
-    state.currentTasks.push({ name: taskTxt, groupId: null, clientId: null });
-  }
-  const goal = (document.getElementById('onbGoal')?.value || '').trim().slice(0, 60);
-  const why = (document.getElementById('onbWhy')?.value || '').trim().slice(0, 160);
-  if (goal) {
-    if (!state.northStarGoal) state.northStarGoal = { id: 'ns' + Date.now(), sessionsContributed: 0 };
-    state.northStarGoal.title = goal;
-    if (why) {
-      state.northStarGoal.whyAnswers = [{ pillar: '', pillarName: 'Why it matters', q: 'Why it matters', a: why }];
-      state.northStarGoal.why = why;
-    }
+    host.querySelector('#onbKeepFree')?.addEventListener('click', () => finishOnboarding(true));
+    onbStartCountdown();
   }
 }
+
+// ---- Report (the personalized "value" the quiz promised) --------------------
+function onbBars() {
+  const a = onbAnswers;
+  const initiation = a.pattern === 'scroll' ? 22 : a.pattern === 'choose' ? 28 : 46;
+  const pull = (a.pulls === 'lost') ? 88 : (a.pulls === 'ten') ? 76 : (a.pulls === 'few') ? 58 : 40;
+  const recovery = a.pattern === 'interrupt' ? 24 : 42;
+  const momentum = (a.streak === 'quit' || a.streak === 'avoid') ? 25 : (a.streak === 'never') ? 32 : 48;
+  return [
+    { label: 'Task initiation',            v: initiation, invert: false },
+    { label: 'Distraction pull',           v: pull,       invert: true  },
+    { label: 'Recovery after interruption', v: recovery,  invert: false },
+    { label: 'Momentum protection',        v: momentum,   invert: false }
+  ];
+}
+function onbReportHtml(step) {
+  const arc = ONB_ARCHETYPES[onbAnswers.pattern] || ONB_ARCHETYPES.drift;
+  const streakLine = {
+    quit:  `One broken streak makes you quit — so your plan protects streaks instead of weaponizing them.`,
+    guilt: `Guilt keeps you going but drains you — your plan swaps guilt for protected momentum.`,
+    avoid: `Streak pressure pushes you away — your plan uses shame-free streaks that survive a missed day.`,
+    never: `You've never had a system hold your momentum — this one is built to.`
+  }[onbAnswers.streak] || '';
+  const bars = onbBars().map(b =>
+    `<div class="onb-bar-row"><span class="onb-bar-label">${b.label}</span>
+      <div class="onb-bar"><span class="onb-bar-fill${b.invert ? ' bad' : ''}" style="width:${b.v}%"></span></div>
+      <span class="onb-bar-note">${b.invert ? (b.v > 65 ? 'high' : 'moderate') : (b.v < 35 ? 'needs support' : 'can grow')}</span></div>`).join('');
+  return `<section class="onb-screen active"><div class="onb-body onb-body-report">
+    <div class="onb-eyebrow">Your Focus Profile</div>
+    <h2 class="onb-h onb-h-report">${arc.name}</h2>
+    <div class="onb-bars">${bars}</div>
+    <div class="onb-findings">
+      <p class="onb-p"><strong>What we found:</strong> ${arc.finding} ${streakLine}</p>
+      <p class="onb-p"><strong>Your plan:</strong> a one-tap start ritual sized for your pattern, your goal kept vividly in front of you when motivation dips, and momentum that survives bad days.</p>
+    </div>
+    </div><div class="onb-foot"><button class="onb-cta" data-next>${step.cta}</button></div></section>`;
+}
+
+// ---- Offer (direct-response close) -------------------------------------------
+function onbOfferHtml() {
+  const arc = ONB_ARCHETYPES[onbAnswers.pattern] || ONB_ARCHETYPES.drift;
+  const goalLine = {
+    work:    'momentum for your work, starting today',
+    study:   'focus that gets your studying done in less time',
+    project: 'real weekly progress on the thing you actually care about',
+    life:    'a calmer, in-control version of your days'
+  }[onbAnswers.goal] || 'starting made easy, every day';
+  return `<section class="onb-screen active onb-screen-offer"><div class="onb-body">
+    <div class="onb-eyebrow">Your plan is ready</div>
+    <h2 class="onb-h">${arc.name} → ${goalLine}.</h2>
+    <ul class="onb-stack">
+      <li><strong>One-tap start ritual</strong> — beats the ${onbAnswers.pattern === 'scroll' ? 'scroll reflex' : 'start wall'} before it wins</li>
+      <li><strong>AI coach + vivid North Star</strong> — your goal, kept alive when motivation dips</li>
+      <li><strong>Streak Freeze</strong> — one bad day never becomes quitting</li>
+      <li><strong>Deep insights</strong> — see exactly when and where you focus best</li>
+    </ul>
+    <div class="onb-hold"><span class="onb-hold-dot"></span>Your Focus Profile &amp; intro price are held for <strong id="onbCountdown">15:00</strong></div>
+    <p class="onb-trial"><strong>Try everything free for 7 days.</strong> Cancel in 10 seconds in Google Play — you keep your profile and pay nothing.</p>
+    </div><div class="onb-foot">
+    <button class="onb-cta onb-cta-offer" id="onbStartTrial">Start my 7 free days</button>
+    <button class="onb-free" id="onbKeepFree">I'll stay on the limited free version</button>
+    <p class="onb-fine">Free includes the basic timer, tasks &amp; journal. Your plan above needs Pro.</p>
+    </div></section>`;
+}
+function onbStartCountdown() {
+  // Honest hold: deadline persists across re-opens instead of resetting.
+  if (!state.onbOfferDeadline) { state.onbOfferDeadline = Date.now() + 15 * 60 * 1000; saveStateDebounced(); }
+  const el = () => document.getElementById('onbCountdown');
+  const tick = () => {
+    const left = Math.max(0, state.onbOfferDeadline - Date.now());
+    const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+    const e = el(); if (e) e.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    if (left <= 0 && onbCountdownTimer) { clearInterval(onbCountdownTimer); onbCountdownTimer = null; }
+  };
+  tick();
+  onbCountdownTimer = setInterval(tick, 1000);
+}
+
 function finishOnboarding(startSession) {
-  onbCommit();
   state.onboardingDone = true;
+  state.onboardingQuiz = onbAnswers;
   saveStateDebounced();
+  // Keep same-session paywall opens (folder cap, session 3…) personalized too.
+  window.Billing?.personalize?.({ quiz: onbAnswers, deadline: state.onbOfferDeadline });
+  if (onbCountdownTimer) { clearInterval(onbCountdownTimer); onbCountdownTimer = null; }
   document.getElementById('onbOverlay')?.classList.add('hidden');
-  // Land on the timer primed and ready — their first task is loaded and the ring
-  // shows a full focus block, so the only thing left to do is press Start. This
-  // replaces the old behavior of dropping the user on an empty home screen.
+  // Land on the timer primed and ready — the ring shows a full focus block, so
+  // the only thing left to do is press Start.
   switchView('timer');
   state.mode = 'work';
   state.sessionDuration = getTotalForMode('work');
@@ -2980,24 +3266,11 @@ function finishOnboarding(startSession) {
   if (startSession) startTimer();
 }
 function wireOnboarding() {
-  document.querySelectorAll('#onbOverlay [data-next]').forEach(b => b.addEventListener('click', onbNext));
-  document.getElementById('onbSkip')?.addEventListener('click', () => finishOnboarding(false));
-  // Interactive one-tap timer demo
-  const demo = document.getElementById('onbDemo');
-  demo?.addEventListener('click', () => {
-    if (demo.classList.contains('playing')) return;
-    demo.classList.add('playing');
-    const lbl = document.getElementById('onbDemoLabel');
-    if (lbl) lbl.textContent = 'Focusing…';
-    haptic('light');
-    setTimeout(() => { if (lbl) lbl.textContent = 'Nice. That was a sprint.'; }, 2400);
+  // Replay mode only: allow closing without redoing the funnel.
+  document.getElementById('onbExitReplay')?.addEventListener('click', () => {
+    if (onbCountdownTimer) { clearInterval(onbCountdownTimer); onbCountdownTimer = null; }
+    document.getElementById('onbOverlay')?.classList.add('hidden');
   });
-  // Offer: start trial hands off to the real paywall; keep-free delivers the aha
-  document.getElementById('onbStartTrial')?.addEventListener('click', () => {
-    finishOnboarding(false);
-    if (window.Billing) window.Billing.openPaywall('onboarding');
-  });
-  document.getElementById('onbKeepFree')?.addEventListener('click', () => finishOnboarding(true));
 }
 
 // ==================== EVENT WIRING ====================
@@ -3012,6 +3285,7 @@ function wire() {
   });
   // Start / pause
   document.getElementById('startBtn').addEventListener('click', () => state.isRunning ? pauseTimer() : startTimer());
+  document.getElementById('justStartBtn')?.addEventListener('click', justStart);
   document.getElementById('resetBtn').addEventListener('click', resetTimer);
   document.getElementById('skipBtn').addEventListener('click', async () => {
     if (state.isRunning || state.isPaused) {

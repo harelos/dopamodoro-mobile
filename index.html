@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=123">
+  <link rel="stylesheet" href="styles.css?v=124">
 </head>
 <body>
   <div class="app">
@@ -159,6 +159,12 @@
             <svg width="22" height="22" id="skipIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
           </button>
         </div>
+
+        <!-- Task-initiation escape hatch: one tap, 2 minutes, guaranteed win -->
+        <button class="just-start hidden" id="justStartBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          Can't start? Just do 2 minutes
+        </button>
 
         <!-- Today's Focus -->
         <div class="todays-focus">
@@ -371,108 +377,14 @@
   <!-- ========= TOAST ========= -->
   <div class="toast" id="toast"></div>
 
-  <!-- ========= ONBOARDING FUNNEL ========= -->
+  <!-- ========= ONBOARDING FUNNEL (quiz — screens rendered by app.js) ========= -->
   <div class="onb-overlay hidden" id="onbOverlay">
     <div class="onb-shell">
       <div class="onb-top">
         <div class="onb-progress" id="onbProgress"></div>
-        <button class="onb-skip" id="onbSkip">Skip</button>
+        <button class="onb-skip hidden" id="onbExitReplay" aria-label="Close">✕</button>
       </div>
-
-      <div class="onb-screens" id="onbScreens">
-
-        <!-- 1 · PAIN HOOK -->
-        <section class="onb-screen active" data-onb="0">
-          <div class="onb-body">
-            <div class="onb-eyebrow">For ADHD brains</div>
-            <h2 class="onb-h">It's not that you're lazy.<br>Starting is just harder for you.</h2>
-            <p class="onb-p">Dopamodoro makes the first step small enough that your brain says yes. Give us 60 seconds and feel the difference.</p>
-          </div>
-          <div class="onb-foot">
-            <button class="onb-cta" data-next>Show me how</button>
-          </div>
-        </section>
-
-        <!-- 2 · TIMER DEMO (do it) -->
-        <section class="onb-screen" data-onb="1">
-          <div class="onb-body">
-            <div class="onb-eyebrow">Step 1 — Start</div>
-            <h2 class="onb-h">One tap. That's the whole trick.</h2>
-            <p class="onb-p">No setup, no guilt. You start, the timer carries you. Try it right now —</p>
-            <button class="onb-demo" id="onbDemo" aria-label="Try a focus tap">
-              <svg viewBox="0 0 120 120" width="150" height="150">
-                <circle class="onb-demo-bg" cx="60" cy="60" r="52"/>
-                <circle class="onb-demo-fill" id="onbDemoFill" cx="60" cy="60" r="52"/>
-              </svg>
-              <span class="onb-demo-label" id="onbDemoLabel">Tap to start</span>
-            </button>
-            <p class="onb-hint" id="onbDemoHint">Next: the reason you'll actually come back.</p>
-          </div>
-          <div class="onb-foot">
-            <button class="onb-cta" data-next>That felt easy</button>
-          </div>
-        </section>
-
-        <!-- 3 · BRAIN DUMP (commitment) -->
-        <section class="onb-screen" data-onb="2">
-          <div class="onb-body">
-            <div class="onb-eyebrow">Step 2 — Unload</div>
-            <h2 class="onb-h">Get it out of your head.</h2>
-            <p class="onb-p">Your brain is for having ideas, not holding them. What's one thing you keep avoiding?</p>
-            <input class="onb-input" type="text" id="onbTask" maxlength="80" placeholder="e.g. the email I've dodged for 3 days">
-          </div>
-          <div class="onb-foot">
-            <button class="onb-cta" data-next>Park it</button>
-          </div>
-        </section>
-
-        <!-- 4 · NORTH STAR / WHY (desire peak) -->
-        <section class="onb-screen" data-onb="3">
-          <div class="onb-body">
-            <div class="onb-eyebrow">Step 3 — Your why</div>
-            <h2 class="onb-h">Most timers track what you do.<br>This one remembers <em>why</em>.</h2>
-            <p class="onb-p">When motivation dips, your North Star pulls you back. What are you really working toward?</p>
-            <input class="onb-input" type="text" id="onbGoal" maxlength="60" placeholder="e.g. Launch my side project">
-            <input class="onb-input" type="text" id="onbWhy" maxlength="120" placeholder="and why it matters to you…">
-          </div>
-          <div class="onb-foot">
-            <button class="onb-cta" data-next>Lock it in</button>
-          </div>
-        </section>
-
-        <!-- 5 · ANTI-SHAME STREAK -->
-        <section class="onb-screen" data-onb="4">
-          <div class="onb-body">
-            <div class="onb-eyebrow">No shame, ever</div>
-            <h2 class="onb-h">Miss a day? Your streak survives.</h2>
-            <p class="onb-p">Other apps punish you for being human. Dopamodoro protects your streak, so one hard day never turns into a spiral of quitting.</p>
-          </div>
-          <div class="onb-foot">
-            <button class="onb-cta" data-next>I'm in</button>
-          </div>
-        </section>
-
-        <!-- 6 · OFFER -->
-        <section class="onb-screen onb-screen-offer" data-onb="5">
-          <div class="onb-body">
-            <div class="onb-eyebrow">You're set up</div>
-            <h2 class="onb-h" id="onbOfferHead">Everything's ready to help you focus.</h2>
-            <ul class="onb-stack">
-              <li>Your AI coach turns your goal into a vivid, all-senses picture that keeps you pulling</li>
-              <li>Unlimited focus folders &amp; North Star goals</li>
-              <li>Streak Freezes that protect your momentum</li>
-              <li>Deep insights that show you when you focus best</li>
-            </ul>
-            <p class="onb-trial">Try Pro free for 7 days. Cancel anytime in Google Play — you're not charged if you cancel before day 7.</p>
-          </div>
-          <div class="onb-foot">
-            <button class="onb-cta onb-cta-offer" id="onbStartTrial">Start 7-day free trial</button>
-            <button class="onb-free" id="onbKeepFree">Keep going free</button>
-            <p class="onb-fine">Free forever includes the timer, tasks &amp; journal.</p>
-          </div>
-        </section>
-
-      </div>
+      <div class="onb-screens" id="onbScreens"></div>
     </div>
   </div>
 
@@ -832,8 +744,8 @@
 
   <!-- Capacitor runtime (loaded by native shell at runtime — also works in browser dev) -->
   <script src="capacitor.js"></script>
-  <script src="app.js?v=123" type="module"></script>
-  <script src="billing.js?v=123"></script>
+  <script src="app.js?v=124" type="module"></script>
+  <script src="billing.js?v=124"></script>
   <script>
     // PWA installability for the TWA wrapper (no-op where SW is unsupported).
     if ('serviceWorker' in navigator) {
